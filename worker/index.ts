@@ -1,6 +1,5 @@
 import Queue, { Job } from 'bull';
 import sharp from 'sharp';
-import * as fs from 'fs';
 import * as path from 'path';
 import * as winston from 'winston';
 import axios from 'axios';
@@ -78,6 +77,17 @@ async function clipRasterToCanvas(
   return { input: clipped, left: interLeft, top: interTop };
 }
 
+function getPublicBaseUrl(): string {
+  const fromEnv = (process.env.PUBLIC_BASE_URL || process.env.SERVER_BASE_URL || '').trim();
+  return fromEnv.replace(/\/+$/, '');
+}
+
+function normalizeAssetUrl(url: string): string {
+  const base = getPublicBaseUrl();
+  if (!base) return url;
+  return url.replace(/^https?:\/\/localhost:3000(?=\/|$)/i, base);
+}
+
 // Simplified renderer using sharp composition
 async function renderImage(template: any): Promise<string> {
   logger.info(`Starting render process for template width: ${template.width}, layers: ${template.layers.length}`);
@@ -94,13 +104,13 @@ async function renderImage(template: any): Promise<string> {
           const base64Data = layer.url.replace(/^data:image\/\w+;base64,/, '');
           input = Buffer.from(base64Data, 'base64');
         } else if (layer.url.startsWith('http')) {
-          const response = await axios.get(layer.url, {
+          const response = await axios.get(normalizeAssetUrl(layer.url), {
             responseType: 'arraybuffer',
             timeout: 60000,
             maxContentLength: 50 * 1024 * 1024,
           });
           input = Buffer.from(response.data);
-          logger.info(`Successfully fetched remote asset: ${layer.url}`);
+          logger.info(`Successfully fetched remote asset: ${normalizeAssetUrl(layer.url)}`);
         } else {
           continue;
         }
@@ -171,20 +181,13 @@ async function renderImage(template: any): Promise<string> {
     },
   });
 
-  const outputFilename = `render-${Date.now()}.png`;
-  const outputPath = path.join(__dirname, '..', 'server', 'uploads', outputFilename);
-  
-  // ensure directory
-  if (!fs.existsSync(path.dirname(outputPath))) {
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  }
-
-  await baseCanvas
+  const outputBuffer = await baseCanvas
     .composite(composites)
     .png()
-    .toFile(outputPath);
+    .toBuffer();
 
-  return `http://localhost:3000/uploads/${outputFilename}`;
+  // Return image directly to avoid cross-container shared-disk issues in Sealos.
+  return `data:image/png;base64,${outputBuffer.toString('base64')}`;
 }
 
 const worker = new Queue('renderQueue', { redis: connection });
