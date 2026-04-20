@@ -21,12 +21,19 @@ import { join } from 'path';
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        redis: {
+      useFactory: async (configService: ConfigService) => {
+        const redisPassword =
+          configService.get<string>('REDIS_PASSWORD') ||
+          configService.get<string>('REDIS_PASS') ||
+          undefined;
+        return {
+          redis: {
           host: configService.get('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
-        },
-      }),
+            password: redisPassword,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
     BullModule.registerQueue({
