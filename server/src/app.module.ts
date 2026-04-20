@@ -26,10 +26,15 @@ import { join } from 'path';
           configService.get<string>('REDIS_PASSWORD') ||
           configService.get<string>('REDIS_PASS') ||
           undefined;
+        const redisUsername =
+          configService.get<string>('REDIS_USERNAME') ||
+          configService.get<string>('REDIS_USER') ||
+          undefined;
         return {
           redis: {
             host: configService.get('REDIS_HOST', 'localhost'),
             port: configService.get<number>('REDIS_PORT', 6379),
+            username: redisUsername,
             password: redisPassword,
             maxRetriesPerRequest: null,
             enableReadyCheck: false,

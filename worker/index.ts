@@ -27,6 +27,7 @@ const logger = winston.createLogger({
 const connection = {
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
+  username: process.env.REDIS_USERNAME || process.env.REDIS_USER || undefined,
   password: process.env.REDIS_PASSWORD || process.env.REDIS_PASS || undefined,
   maxRetriesPerRequest: null as null,
   enableReadyCheck: false,
