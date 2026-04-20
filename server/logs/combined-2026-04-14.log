@@ -1,0 +1,76 @@
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-14T12:49:30.507Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-14T12:49:57.197Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-14T13:07:24.978Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-14T13:07:27.705Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-14T13:09:00.946Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-14T13:09:33.485Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-14T13:09:56.137Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:11:32.884Z"}
+{"level":"info","message":"Job 30 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":19,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:11:32.903Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:11:59.254Z"}
+{"level":"info","message":"Job 31 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":20,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:11:59.257Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:12:15.593Z"}
+{"level":"info","message":"Job 32 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":21,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:12:15.595Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:14:45.776Z"}
+{"level":"info","message":"Job 33 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":0,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:14:45.780Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:15:01.344Z"}
+{"level":"info","message":"Job 34 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":1,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:15:01.346Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:16:09.524Z"}
+{"level":"info","message":"Job 35 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":2,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:16:09.526Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:22:01.413Z"}
+{"level":"info","message":"Job 36 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":3,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:22:01.416Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:22:30.839Z"}
+{"level":"info","message":"Job 37 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":4,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:22:30.841Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:23:54.383Z"}
+{"level":"info","message":"Job 38 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":0,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:23:54.385Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:24:34.061Z"}
+{"level":"info","message":"Job 39 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":6,\"failed\":1,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:24:34.062Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:25:13.899Z"}
+{"level":"info","message":"Job 40 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":7,\"failed\":1,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:25:13.910Z"}
+{"level":"error","message":"Method: GET URL: /favicon.ico Status: 404 -> NotFoundException: Cannot GET /favicon.ico\n    at callback (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\@nestjs\\core\\router\\routes-resolver.js:77:19)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\@nestjs\\core\\router\\router-proxy.js:9:23\n    at Layer.handleRequest (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\lib\\layer.js:152:17)\n    at trimPrefix (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:342:13)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:297:9\n    at processParams (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:582:12)\n    at next (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:291:5)\n    at Layer.handleRequest (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\lib\\layer.js:147:12)\n    at trimPrefix (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:342:13)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:297:9","timestamp":"2026-04-14T13:25:19.786Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:25:37.066Z"}
+{"level":"info","message":"Job 41 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":8,\"failed\":1,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:25:37.105Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:25:44.361Z"}
+{"level":"info","message":"Job 42 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":9,\"failed\":1,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:25:44.395Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:26:55.310Z"}
+{"level":"info","message":"Job 43 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":10,\"failed\":1,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:26:55.392Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T13:27:44.908Z"}
+{"level":"info","message":"Job 44 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":10,\"failed\":2,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T13:27:45.025Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:29:02.862Z"}
+{"level":"info","message":"Job 45 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":11,\"failed\":2,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:29:02.865Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:43:12.716Z"}
+{"level":"info","message":"Job 46 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":12,\"failed\":2,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:43:12.738Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:43:28.498Z"}
+{"level":"info","message":"Job 47 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":12,\"failed\":3,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:43:28.519Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:44:09.246Z"}
+{"level":"info","message":"Job 48 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":12,\"failed\":4,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:44:09.270Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:44:35.857Z"}
+{"level":"info","message":"Job 49 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":12,\"failed\":5,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:44:35.877Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:48:55.296Z"}
+{"level":"info","message":"Job 50 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":12,\"failed\":6,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:48:55.309Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:49:39.531Z"}
+{"level":"info","message":"Job 51 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":12,\"failed\":7,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:49:39.537Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:51:50.271Z"}
+{"level":"info","message":"Job 52 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":12,\"failed\":8,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:51:50.286Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:52:09.975Z"}
+{"level":"info","message":"Job 53 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":12,\"failed\":9,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:52:10.019Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:52:25.721Z"}
+{"level":"info","message":"Job 54 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":13,\"failed\":9,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:52:25.744Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:52:54.101Z"}
+{"level":"info","message":"Job 55 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":13,\"failed\":10,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:52:54.122Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:53:06.525Z"}
+{"level":"info","message":"Job 56 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":13,\"failed\":11,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:53:06.555Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:54:05.364Z"}
+{"level":"info","message":"Job 57 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":13,\"failed\":12,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:54:05.398Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:54:24.410Z"}
+{"level":"info","message":"Job 58 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":14,\"failed\":12,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:54:24.421Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T14:54:40.837Z"}
+{"level":"info","message":"Job 59 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":15,\"failed\":12,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T14:54:40.856Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T15:18:04.871Z"}
+{"level":"info","message":"Job 60 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":15,\"failed\":13,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T15:18:05.059Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T15:37:56.194Z"}
+{"level":"info","message":"Job 61 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":15,\"failed\":14,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T15:37:56.239Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T15:46:27.453Z"}
+{"level":"info","message":"Job 62 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":16,\"failed\":14,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T15:46:27.503Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-14T15:54:04.209Z"}
+{"level":"info","message":"Job 63 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":16,\"failed\":15,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-14T15:54:04.248Z"}

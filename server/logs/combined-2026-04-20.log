@@ -1,0 +1,33 @@
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-20T03:51:44.085Z"}
+{"level":"info","message":"Saving thumbnail to: E:\\乱七八糟文件\\小程序\\moban\\server\\uploads\\thumb-1776657132476.png","timestamp":"2026-04-20T03:52:12.476Z"}
+{"level":"info","message":"Saving thumbnail to: E:\\乱七八糟文件\\小程序\\moban\\server\\uploads\\thumb-1776657136472.png","timestamp":"2026-04-20T03:52:16.472Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T03:53:39.567Z"}
+{"level":"info","message":"Job 92 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":40,\"failed\":20,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T03:53:39.594Z"}
+{"level":"info","message":"Saving thumbnail to: E:\\乱七八糟文件\\小程序\\moban\\server\\uploads\\thumb-1776657263402.png","timestamp":"2026-04-20T03:54:23.402Z"}
+{"level":"info","message":"Saving thumbnail to: E:\\乱七八糟文件\\小程序\\moban\\server\\uploads\\thumb-1776657366288.png","timestamp":"2026-04-20T03:56:06.288Z"}
+{"level":"info","message":"Saving thumbnail to: E:\\乱七八糟文件\\小程序\\moban\\server\\uploads\\thumb-1776657369368.png","timestamp":"2026-04-20T03:56:09.368Z"}
+{"level":"info","message":"Saving thumbnail to: E:\\乱七八糟文件\\小程序\\moban\\server\\uploads\\thumb-1776657459842.png","timestamp":"2026-04-20T03:57:39.842Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T04:03:24.107Z"}
+{"level":"info","message":"Job 93 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":41,\"failed\":20,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T04:03:24.127Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T04:08:06.713Z"}
+{"level":"info","message":"Job 94 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":41,\"failed\":21,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T04:08:06.743Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-20T04:12:07.308Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T04:13:34.688Z"}
+{"level":"info","message":"Job 95 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":41,\"failed\":22,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T04:13:34.715Z"}
+{"level":"info","message":"Saving thumbnail to: E:\\乱七八糟文件\\小程序\\moban\\server\\uploads\\thumb-1776658426416.png","timestamp":"2026-04-20T04:13:46.416Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T04:13:52.150Z"}
+{"level":"info","message":"Job 96 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":42,\"failed\":22,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T04:13:52.182Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T04:16:44.302Z"}
+{"level":"info","message":"Job 97 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":42,\"failed\":23,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T04:16:44.325Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T04:17:06.189Z"}
+{"level":"info","message":"Job 98 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":42,\"failed\":24,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T04:17:06.253Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T04:17:18.428Z"}
+{"level":"info","message":"Job 99 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":43,\"failed\":24,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T04:17:18.436Z"}
+{"level":"error","message":"Method: GET URL: /favicon.ico Status: 404 -> NotFoundException: Cannot GET /favicon.ico\n    at callback (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\@nestjs\\core\\router\\routes-resolver.js:77:19)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\@nestjs\\core\\router\\router-proxy.js:9:23\n    at Layer.handleRequest (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\lib\\layer.js:152:17)\n    at trimPrefix (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:342:13)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:297:9\n    at processParams (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:582:12)\n    at next (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:291:5)\n    at Layer.handleRequest (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\lib\\layer.js:147:12)\n    at trimPrefix (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:342:13)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:297:9","timestamp":"2026-04-20T04:17:23.241Z"}
+{"level":"error","message":"Method: GET URL: /.well-known/appspecific/com.chrome.devtools.json Status: 404 -> NotFoundException: Cannot GET /.well-known/appspecific/com.chrome.devtools.json\n    at callback (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\@nestjs\\core\\router\\routes-resolver.js:77:19)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\@nestjs\\core\\router\\router-proxy.js:9:23\n    at Layer.handleRequest (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\lib\\layer.js:152:17)\n    at trimPrefix (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:342:13)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:297:9\n    at processParams (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:582:12)\n    at next (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:291:5)\n    at Layer.handleRequest (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\lib\\layer.js:147:12)\n    at trimPrefix (E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:342:13)\n    at E:\\乱七八糟文件\\小程序\\moban\\server\\node_modules\\router\\index.js:297:9","timestamp":"2026-04-20T04:17:32.060Z"}
+{"level":"info","message":"Received render request for template","timestamp":"2026-04-20T04:18:48.594Z"}
+{"level":"info","message":"Job 100 added successfully. Queue status: {\"waiting\":0,\"active\":1,\"completed\":44,\"failed\":24,\"delayed\":0,\"paused\":0}","timestamp":"2026-04-20T04:18:48.607Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-20T05:23:09.718Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-20T05:23:12.441Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-20T06:24:07.599Z"}
+{"level":"info","message":"Server is running on: http://localhost:3000","timestamp":"2026-04-20T06:24:10.320Z"}
