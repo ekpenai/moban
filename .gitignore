@@ -1,0 +1,31 @@
+# dependencies
+**/node_modules/
+
+# build outputs
+**/dist/
+**/.vite/
+**/.cache/
+**/.tmp/
+**/*.tsbuildinfo
+
+# logs
+**/logs/
+*.log
+
+# env (keep real secrets out of git)
+**/.env
+**/.env.*
+!.env.example
+!.env.sealos.example
+
+# runtime uploads (generated)
+uploads/
+server/uploads/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
