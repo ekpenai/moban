@@ -49,9 +49,14 @@ function App() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await api.post('/upload/psd', formData);
+      const res = await api.post('/upload/psd', formData, { timeout: 180000 });
       setTemplate(res.data.data);
       toast.success('PSD 导入成功');
+    } catch (error: any) {
+      const message = error?.message?.includes('timeout')
+        ? 'PSD 导入超时，请稍后重试或减小文件体积'
+        : '导入失败，请检查文件格式或服务状态';
+      toast.error(message);
     } finally { setIsUploading(false); }
   };
 
