@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile, Req } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
@@ -10,6 +10,7 @@ import { SaveTemplateDto, RenderTemplateDto } from './dto/template.dto';
 import { WinstonLoggerService } from './logger.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { Request } from 'express';
 
 @Controller()
 export class AppController {
@@ -20,6 +21,42 @@ export class AppController {
     private readonly logger: WinstonLoggerService,
   ) {}
 
+  private getPublicBaseUrl(req?: Request): string {
+    const envBase = (process.env.PUBLIC_BASE_URL || '').trim();
+    if (envBase) {
+      return envBase.replace(/\/+$/, '');
+    }
+    const protoHeader = (req?.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
+    const hostHeader = (req?.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim();
+    const host = hostHeader || req?.get('host') || `localhost:${process.env.PORT || 3000}`;
+    const proto = protoHeader || req?.protocol || 'http';
+    return `${proto}://${host}`.replace(/\/+$/, '');
+  }
+
+  private toPublicUploadUrl(filename: string, req?: Request): string {
+    return `${this.getPublicBaseUrl(req)}/uploads/${filename}`;
+  }
+
+  private normalizeUploadUrl(url?: string, req?: Request): string | undefined {
+    if (!url || typeof url !== 'string') return url;
+    return url.replace(/^https?:\/\/localhost:3000\/uploads\//i, `${this.getPublicBaseUrl(req)}/uploads/`);
+  }
+
+  private normalizeTemplateData(template: Template, req?: Request): Template {
+    const normalizedLayers = Array.isArray(template.layers)
+      ? template.layers.map((layer: any) => ({
+          ...layer,
+          url: this.normalizeUploadUrl(layer?.url, req),
+        }))
+      : template.layers;
+
+    return {
+      ...template,
+      thumbnail: this.normalizeUploadUrl(template.thumbnail, req),
+      layers: normalizedLayers as any,
+    };
+  }
+
   @Post('upload/psd')
   @UseInterceptors(FileInterceptor('file', { dest: './uploads' }))
   async uploadPsd(@UploadedFile() file: Express.Multer.File) {
@@ -29,13 +66,13 @@ export class AppController {
 
   @Post('upload/image')
   @UseInterceptors(FileInterceptor('file', { dest: './uploads' }))
-  async uploadImage(@UploadedFile() file: Express.Multer.File) {
-    const url = `http://localhost:3000/uploads/${file.filename}`;
+  async uploadImage(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
+    const url = this.toPublicUploadUrl(file.filename, req);
     return { url };
   }
 
   @Post('templates/save')
-  async saveTemplate(@Body() body: SaveTemplateDto) {
+  async saveTemplate(@Body() body: SaveTemplateDto, @Req() req: Request) {
     let thumbnailPath = body.thumbnail;
 
     // 处理 Base64 缩略图
@@ -52,7 +89,7 @@ export class AppController {
       }
 
       fs.writeFileSync(path.join(uploadDir, filename), buffer);
-      thumbnailPath = `http://localhost:3000/uploads/${filename}`;
+      thumbnailPath = this.toPublicUploadUrl(filename, req);
     }
 
     const template = this.templateRepo.create({
@@ -65,22 +102,22 @@ export class AppController {
       category: body.category || '未分类'
     });
     const saved = await this.templateRepo.save(template);
-    return { data: saved };
+    return { data: this.normalizeTemplateData(saved, req) };
   }
 
   @Get('templates')
-  async listTemplates() {
+  async listTemplates(@Req() req: Request) {
     const list = await this.templateRepo.find({ 
       select: ['id', 'name', 'width', 'height', 'createdAt', 'thumbnail', 'category'],
       order: { createdAt: 'DESC' } 
     });
-    return { data: list };
+    return { data: list.map((item) => this.normalizeTemplateData(item, req)) };
   }
 
   @Get('templates/:id')
-  async getTemplateDetail(@Param('id') id: string) {
+  async getTemplateDetail(@Param('id') id: string, @Req() req: Request) {
     const template = await this.templateRepo.findOne({ where: { id } });
-    return { data: template };
+    return { data: template ? this.normalizeTemplateData(template, req) : null };
   }
 
   @Delete('templates/:id')
