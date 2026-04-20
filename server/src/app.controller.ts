@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile, Req, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
@@ -11,6 +11,22 @@ import { WinstonLoggerService } from './logger.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Request } from 'express';
+
+function parseSizeToBytes(input: string | undefined, fallbackBytes: number): number {
+  if (!input) return fallbackBytes;
+  const s = String(input).trim().toLowerCase();
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(b|kb|kib|mb|mib|gb|gib)?$/);
+  if (!m) return fallbackBytes;
+  const value = Number(m[1]);
+  const unit = m[2] || 'b';
+  const factor =
+    unit === 'kb' || unit === 'kib' ? 1024 :
+    unit === 'mb' || unit === 'mib' ? 1024 * 1024 :
+    unit === 'gb' || unit === 'gib' ? 1024 * 1024 * 1024 : 1;
+  return Math.max(1, Math.floor(value * factor));
+}
+
+const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
 
 @Controller()
 export class AppController {
@@ -58,8 +74,11 @@ export class AppController {
   }
 
   @Post('upload/psd')
-  @UseInterceptors(FileInterceptor('file', { dest: './uploads' }))
+  @UseInterceptors(FileInterceptor('file', { dest: './uploads', limits: { fileSize: PSD_UPLOAD_LIMIT_BYTES } }))
   async uploadPsd(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('未接收到 PSD 文件，或文件超过上传上限');
+    }
     const result = await this.psdService.parsePsd(file.path);
     return { data: result };
   }

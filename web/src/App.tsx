@@ -25,6 +25,7 @@ function App() {
 
   const [activeTab, setActiveTab] = useState<TabType>('layers');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
   const [renderResult, setRenderResult] = useState<string | null>(null);
@@ -46,11 +47,21 @@ function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
+    setUploadProgress(0);
     const formData = new FormData();
     formData.append('file', file);
     try {
       // Large PSD parsing can take long on cloud; disable request timeout for this endpoint.
-      const res = await api.post('/upload/psd', formData, { timeout: 0 });
+      const res = await api.post('/upload/psd', formData, {
+        timeout: 0,
+        onUploadProgress: (evt) => {
+          const total = evt.total || file.size || 0;
+          if (!total) return;
+          const percent = Math.min(100, Math.round((evt.loaded / total) * 100));
+          setUploadProgress(percent);
+        },
+      });
+      setUploadProgress(100);
       setTemplate(res.data.data);
       toast.success('PSD 导入成功');
     } catch (error: any) {
@@ -58,7 +69,10 @@ function App() {
         ? 'PSD 导入超时，请稍后重试或减小文件体积'
         : '导入失败，请检查文件格式或服务状态';
       toast.error(message);
-    } finally { setIsUploading(false); }
+    } finally {
+      setIsUploading(false);
+      window.setTimeout(() => setUploadProgress(0), 600);
+    }
   };
 
   const handleSave = async () => {
@@ -247,10 +261,10 @@ function App() {
              保存
           </button>
           <label className="h-8 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 hover:bg-slate-100 rounded-lg text-[11px] sm:text-xs font-bold text-indigo-600 cursor-pointer transition-all active:scale-95">
-            <UploadCloud size={14} />
-            <span className="hidden sm:inline">导入 PSD</span>
-            <span className="sm:hidden">导入</span>
-            <input type="file" hidden onChange={handlePsdUpload} />
+            {isUploading ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+            <span className="hidden sm:inline">{isUploading ? `上传中 ${uploadProgress}%` : '导入 PSD'}</span>
+            <span className="sm:hidden">{isUploading ? `${uploadProgress}%` : '导入'}</span>
+            <input type="file" hidden accept=".psd" onChange={handlePsdUpload} disabled={isUploading} />
           </label>
         </div>
 
@@ -268,6 +282,16 @@ function App() {
       </header>
 
       <div className="flex-1 flex overflow-hidden pt-16 sm:pt-20 relative">
+        {isUploading && (
+          <div className="fixed top-[56px] sm:top-[64px] left-0 right-0 z-[120] px-4">
+            <div className="h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-600 transition-all duration-200"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
         {/* === MacOS Dock Navigation === */}
         <nav className="w-0 md:w-[72px] bg-transparent md:flex md:flex-col md:items-center md:py-6 md:gap-3 z-[60] md:ml-4 md:my-4 shrink-0">
           <div className="fixed md:static bottom-3 left-1/2 -translate-x-1/2 md:translate-x-0 flex md:flex-col gap-2 p-1.5 bg-white/80 backdrop-blur-xl rounded-[20px] md:rounded-[24px] border border-white/50 shadow-[0_4px_24px_rgba(0,0,0,0.08)]">
