@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile, Req } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile, Req, ServiceUnavailableException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
@@ -137,7 +137,7 @@ export class AppController {
   async renderTemplate(@Body() body: RenderTemplateDto) {
     this.logger.log(`Received render request for template`);
     try {
-      const job = await this.renderQueue.add('render-job', {
+      const enqueuePromise = this.renderQueue.add('render-job', {
         template: body.template,
       }, {
         attempts: 3,
@@ -148,13 +148,23 @@ export class AppController {
         removeOnComplete: 100,
         removeOnFail: 500,
       });
+
+      // Avoid hanging forever when Redis is temporarily unreachable.
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('enqueue_timeout')), 12000);
+      });
+
+      const job = await Promise.race([enqueuePromise, timeoutPromise]);
       
       const counts = await this.renderQueue.getJobCounts();
       this.logger.log(`Job ${job.id} added successfully. Queue status: ${JSON.stringify(counts)}`);
       return { jobId: job.id };
     } catch (err) {
       this.logger.error('Failed to add job to Redis', err.stack);
-      throw err;
+      if ((err as Error)?.message === 'enqueue_timeout') {
+        throw new ServiceUnavailableException('渲染队列暂时不可用，请稍后重试');
+      }
+      throw new ServiceUnavailableException('渲染任务提交失败，请稍后重试');
     }
   }
 
