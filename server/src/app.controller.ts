@@ -52,7 +52,7 @@ export class AppController {
 
     return {
       ...template,
-      thumbnail: this.normalizeUploadUrl(template.thumbnail, req),
+      thumbnail: this.normalizeUploadUrl(template.thumbnail, req) || '',
       layers: normalizedLayers as any,
     };
   }
