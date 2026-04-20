@@ -28,9 +28,11 @@ import { join } from 'path';
           undefined;
         return {
           redis: {
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
+            host: configService.get('REDIS_HOST', 'localhost'),
+            port: configService.get<number>('REDIS_PORT', 6379),
             password: redisPassword,
+            maxRetriesPerRequest: null,
+            enableReadyCheck: false,
           },
         };
       },
