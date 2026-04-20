@@ -49,7 +49,8 @@ function App() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await api.post('/upload/psd', formData, { timeout: 180000 });
+      // Large PSD parsing can take long on cloud; disable request timeout for this endpoint.
+      const res = await api.post('/upload/psd', formData, { timeout: 0 });
       setTemplate(res.data.data);
       toast.success('PSD 导入成功');
     } catch (error: any) {
