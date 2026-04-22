@@ -4,12 +4,17 @@ import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { SaveTemplateDto, RenderTemplateDto } from './dto/template.dto';
 import { WinstonLoggerService } from './logger.service';
+import type { Request } from 'express';
 export declare class AppController {
     private readonly psdService;
     private renderQueue;
     private templateRepo;
     private readonly logger;
     constructor(psdService: PsdService, renderQueue: Queue, templateRepo: Repository<Template>, logger: WinstonLoggerService);
+    private getPublicBaseUrl;
+    private toPublicUploadUrl;
+    private normalizeUploadUrl;
+    private normalizeTemplateData;
     uploadPsd(file: Express.Multer.File): Promise<{
         data: {
             width: number;
@@ -17,16 +22,16 @@ export declare class AppController {
             layers: any[];
         };
     }>;
-    uploadImage(file: Express.Multer.File): Promise<{
+    uploadImage(file: Express.Multer.File, req: Request): Promise<{
         url: string;
     }>;
-    saveTemplate(body: SaveTemplateDto): Promise<{
+    saveTemplate(body: SaveTemplateDto, req: Request): Promise<{
         data: Template;
     }>;
-    listTemplates(): Promise<{
+    listTemplates(req: Request): Promise<{
         data: Template[];
     }>;
-    getTemplateDetail(id: string): Promise<{
+    getTemplateDetail(id: string, req: Request): Promise<{
         data: Template | null;
     }>;
     deleteTemplate(id: string): Promise<{

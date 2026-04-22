@@ -49,13 +49,16 @@ export class AppController {
     return `${proto}://${host}`.replace(/\/+$/, '');
   }
 
-  private toPublicUploadUrl(filename: string, req?: Request): string {
-    return `${this.getPublicBaseUrl(req)}/uploads/${filename}`;
+  private toPublicUploadUrl(filename: string, req?: Request, folder: string = 'uploads'): string {
+    return `${this.getPublicBaseUrl(req)}/${folder}/${filename}`;
   }
 
   private normalizeUploadUrl(url?: string, req?: Request): string | undefined {
     if (!url || typeof url !== 'string') return url;
-    return url.replace(/^https?:\/\/localhost:3000\/uploads\//i, `${this.getPublicBaseUrl(req)}/uploads/`);
+    // 兼容 uploads 和 images 路径
+    return url
+      .replace(/^https?:\/\/localhost:3000\/uploads\//i, `${this.getPublicBaseUrl(req)}/uploads/`)
+      .replace(/^https?:\/\/localhost:3000\/images\//i, `${this.getPublicBaseUrl(req)}/images/`);
   }
 
   private normalizeTemplateData(template: Template, req?: Request): Template {
@@ -99,16 +102,16 @@ export class AppController {
       const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
       const buffer = Buffer.from(base64Data, 'base64');
       const filename = `thumb-${Date.now()}.png`;
-      const uploadDir = path.join(process.cwd(), 'uploads');
+      const imagesDir = path.join(process.cwd(), 'images');
       
-      this.logger.log(`Saving thumbnail to: ${path.join(uploadDir, filename)}`);
+      this.logger.log(`Saving thumbnail to: ${path.join(imagesDir, filename)}`);
 
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
       }
 
-      fs.writeFileSync(path.join(uploadDir, filename), buffer);
-      thumbnailPath = this.toPublicUploadUrl(filename, req);
+      fs.writeFileSync(path.join(imagesDir, filename), buffer);
+      thumbnailPath = this.toPublicUploadUrl(filename, req, 'images');
     }
 
     const template = this.templateRepo.create({

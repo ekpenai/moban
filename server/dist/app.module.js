@@ -33,12 +33,24 @@ exports.AppModule = AppModule = __decorate([
             }),
             bull_1.BullModule.forRootAsync({
                 imports: [config_1.ConfigModule],
-                useFactory: async (configService) => ({
-                    redis: {
-                        host: configService.get('REDIS_HOST', 'localhost'),
-                        port: configService.get('REDIS_PORT', 6379),
-                    },
-                }),
+                useFactory: async (configService) => {
+                    const redisPassword = configService.get('REDIS_PASSWORD') ||
+                        configService.get('REDIS_PASS') ||
+                        undefined;
+                    const redisUsername = configService.get('REDIS_USERNAME') ||
+                        configService.get('REDIS_USER') ||
+                        undefined;
+                    return {
+                        redis: {
+                            host: configService.get('REDIS_HOST', 'localhost'),
+                            port: configService.get('REDIS_PORT', 6379),
+                            username: redisUsername,
+                            password: redisPassword,
+                            maxRetriesPerRequest: null,
+                            enableReadyCheck: false,
+                        },
+                    };
+                },
                 inject: [config_1.ConfigService],
             }),
             bull_1.BullModule.registerQueue({

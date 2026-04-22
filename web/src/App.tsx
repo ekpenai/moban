@@ -15,6 +15,19 @@ import toast from 'react-hot-toast';
 
 type TabType = 'library' | 'tools' | 'layers' | null;
 
+type MpMessagePayload = Record<string, unknown>;
+
+function postToMiniProgram(type: string, payload: MpMessagePayload = {}) {
+  const message = { type, ...payload, timestamp: Date.now() };
+  const wxObj = (window as any)?.wx;
+  if (wxObj?.miniProgram?.postMessage) {
+    wxObj.miniProgram.postMessage({ data: message });
+  }
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(message, '*');
+  }
+}
+
 function App() {
   const { 
     setTemplate, template, selectedId, setSelectedId, 
@@ -34,7 +47,29 @@ function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState('全部');
 
-  React.useEffect(() => { fetchTemplates(); }, []);
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const templateId = params.get('templateId');
+    const from = params.get('from');
+
+    fetchTemplates();
+    if (from === 'mp') {
+      postToMiniProgram('ready', { scene: 'editor' });
+    }
+    if (templateId) {
+      api.get(`/templates/${templateId}`)
+        .then((res) => {
+          if (res?.data?.data) {
+            setTemplate(res.data.data);
+            postToMiniProgram('templateLoaded', { templateId });
+          }
+        })
+        .catch(() => {
+          toast.error('指定模板加载失败');
+          postToMiniProgram('templateLoadFail', { templateId });
+        });
+    }
+  }, []);
 
   const fetchTemplates = async () => {
     try {
@@ -107,7 +142,11 @@ function App() {
     try {
       await api.post('/templates/save', { ...template, name, thumbnail, category: categoryName });
       toast.success('已保存至云端');
+      postToMiniProgram('saveSuccess', { name, category: categoryName });
       fetchTemplates();
+    } catch {
+      postToMiniProgram('saveFail');
+      toast.error('保存失败，请稍后重试');
     } finally { setIsSaving(false); }
   };
 
@@ -153,26 +192,31 @@ function App() {
             setRenderResult(result);
             setIsRendering(false);
             toast.success('导出完成', { id: tid });
+            postToMiniProgram('renderSuccess', { result });
             return;
           }
 
           if (status === 'failed') {
+            postToMiniProgram('renderFail', { reason: failedReason || 'failed' });
             finishError(failedReason ? `导出失败：${failedReason}` : '导出失败，请查看服务端或 Worker 日志');
             return;
           }
 
           if (status === 'not_found') {
+            postToMiniProgram('renderFail', { reason: 'not_found' });
             finishError('任务不存在或已过期，请重试导出');
             return;
           }
         } catch {
           if (poll) clearInterval(poll);
           setIsRendering(false);
+          postToMiniProgram('renderFail', { reason: 'poll_error' });
           toast.error('查询导出状态失败，请检查网络或后端服务', { id: tid });
         }
       }, 2000);
     } catch {
       setIsRendering(false);
+      postToMiniProgram('renderFail', { reason: 'submit_error' });
       toast.error('提交导出任务失败', { id: tid });
     }
   };

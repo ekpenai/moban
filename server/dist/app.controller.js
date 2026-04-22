@@ -57,6 +57,21 @@ const template_dto_1 = require("./dto/template.dto");
 const logger_service_1 = require("./logger.service");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+function parseSizeToBytes(input, fallbackBytes) {
+    if (!input)
+        return fallbackBytes;
+    const s = String(input).trim().toLowerCase();
+    const m = s.match(/^(\d+(?:\.\d+)?)\s*(b|kb|kib|mb|mib|gb|gib)?$/);
+    if (!m)
+        return fallbackBytes;
+    const value = Number(m[1]);
+    const unit = m[2] || 'b';
+    const factor = unit === 'kb' || unit === 'kib' ? 1024 :
+        unit === 'mb' || unit === 'mib' ? 1024 * 1024 :
+            unit === 'gb' || unit === 'gib' ? 1024 * 1024 * 1024 : 1;
+    return Math.max(1, Math.floor(value * factor));
+}
+const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
 let AppController = class AppController {
     psdService;
     renderQueue;
@@ -68,15 +83,50 @@ let AppController = class AppController {
         this.templateRepo = templateRepo;
         this.logger = logger;
     }
+    getPublicBaseUrl(req) {
+        const envBase = (process.env.PUBLIC_BASE_URL || '').trim();
+        if (envBase) {
+            return envBase.replace(/\/+$/, '');
+        }
+        const protoHeader = req?.headers['x-forwarded-proto']?.split(',')[0]?.trim();
+        const hostHeader = req?.headers['x-forwarded-host']?.split(',')[0]?.trim();
+        const host = hostHeader || req?.get('host') || `localhost:${process.env.PORT || 3000}`;
+        const proto = protoHeader || req?.protocol || 'http';
+        return `${proto}://${host}`.replace(/\/+$/, '');
+    }
+    toPublicUploadUrl(filename, req) {
+        return `${this.getPublicBaseUrl(req)}/uploads/${filename}`;
+    }
+    normalizeUploadUrl(url, req) {
+        if (!url || typeof url !== 'string')
+            return url;
+        return url.replace(/^https?:\/\/localhost:3000\/uploads\//i, `${this.getPublicBaseUrl(req)}/uploads/`);
+    }
+    normalizeTemplateData(template, req) {
+        const normalizedLayers = Array.isArray(template.layers)
+            ? template.layers.map((layer) => ({
+                ...layer,
+                url: this.normalizeUploadUrl(layer?.url, req),
+            }))
+            : template.layers;
+        return {
+            ...template,
+            thumbnail: this.normalizeUploadUrl(template.thumbnail, req) || '',
+            layers: normalizedLayers,
+        };
+    }
     async uploadPsd(file) {
+        if (!file) {
+            throw new common_1.BadRequestException('未接收到 PSD 文件，或文件超过上传上限');
+        }
         const result = await this.psdService.parsePsd(file.path);
         return { data: result };
     }
-    async uploadImage(file) {
-        const url = `http://localhost:3000/uploads/${file.filename}`;
+    async uploadImage(file, req) {
+        const url = this.toPublicUploadUrl(file.filename, req);
         return { url };
     }
-    async saveTemplate(body) {
+    async saveTemplate(body, req) {
         let thumbnailPath = body.thumbnail;
         if (body.thumbnail && body.thumbnail.startsWith('data:image')) {
             const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
@@ -88,7 +138,7 @@ let AppController = class AppController {
                 fs.mkdirSync(uploadDir, { recursive: true });
             }
             fs.writeFileSync(path.join(uploadDir, filename), buffer);
-            thumbnailPath = `http://localhost:3000/uploads/${filename}`;
+            thumbnailPath = this.toPublicUploadUrl(filename, req);
         }
         const template = this.templateRepo.create({
             id: body.id,
@@ -100,18 +150,18 @@ let AppController = class AppController {
             category: body.category || '未分类'
         });
         const saved = await this.templateRepo.save(template);
-        return { data: saved };
+        return { data: this.normalizeTemplateData(saved, req) };
     }
-    async listTemplates() {
+    async listTemplates(req) {
         const list = await this.templateRepo.find({
             select: ['id', 'name', 'width', 'height', 'createdAt', 'thumbnail', 'category'],
             order: { createdAt: 'DESC' }
         });
-        return { data: list };
+        return { data: list.map((item) => this.normalizeTemplateData(item, req)) };
     }
-    async getTemplateDetail(id) {
+    async getTemplateDetail(id, req) {
         const template = await this.templateRepo.findOne({ where: { id } });
-        return { data: template };
+        return { data: template ? this.normalizeTemplateData(template, req) : null };
     }
     async deleteTemplate(id) {
         await this.templateRepo.delete(id);
@@ -126,7 +176,7 @@ let AppController = class AppController {
     async renderTemplate(body) {
         this.logger.log(`Received render request for template`);
         try {
-            const job = await this.renderQueue.add('render-job', {
+            const enqueuePromise = this.renderQueue.add('render-job', {
                 template: body.template,
             }, {
                 attempts: 3,
@@ -137,13 +187,20 @@ let AppController = class AppController {
                 removeOnComplete: 100,
                 removeOnFail: 500,
             });
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('enqueue_timeout')), 12000);
+            });
+            const job = await Promise.race([enqueuePromise, timeoutPromise]);
             const counts = await this.renderQueue.getJobCounts();
             this.logger.log(`Job ${job.id} added successfully. Queue status: ${JSON.stringify(counts)}`);
             return { jobId: job.id };
         }
         catch (err) {
             this.logger.error('Failed to add job to Redis', err.stack);
-            throw err;
+            if (err?.message === 'enqueue_timeout') {
+                throw new common_1.ServiceUnavailableException('渲染队列暂时不可用，请稍后重试');
+            }
+            throw new common_1.ServiceUnavailableException('渲染任务提交失败，请稍后重试');
         }
     }
     async getRenderStatus(jobId) {
@@ -163,7 +220,7 @@ let AppController = class AppController {
 exports.AppController = AppController;
 __decorate([
     (0, common_1.Post)('upload/psd'),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { dest: './uploads' })),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { dest: './uploads', limits: { fileSize: PSD_UPLOAD_LIMIT_BYTES } })),
     __param(0, (0, common_1.UploadedFile)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -173,28 +230,32 @@ __decorate([
     (0, common_1.Post)('upload/image'),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { dest: './uploads' })),
     __param(0, (0, common_1.UploadedFile)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "uploadImage", null);
 __decorate([
     (0, common_1.Post)('templates/save'),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [template_dto_1.SaveTemplateDto]),
+    __metadata("design:paramtypes", [template_dto_1.SaveTemplateDto, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "saveTemplate", null);
 __decorate([
     (0, common_1.Get)('templates'),
+    __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "listTemplates", null);
 __decorate([
     (0, common_1.Get)('templates/:id'),
     __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "getTemplateDetail", null);
 __decorate([
