@@ -45,6 +45,7 @@ services:
       - redis
     volumes:
       - ./uploads:/app/uploads
+      - ./images:/app/images
 
   worker:
     build:
@@ -66,6 +67,7 @@ services:
       - server
     volumes:
       - ./uploads:/server/uploads
+      - ./images:/server/images
 
 volumes:
   mysql_data:
