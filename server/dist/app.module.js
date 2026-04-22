@@ -30,6 +30,9 @@ exports.AppModule = AppModule = __decorate([
             serve_static_1.ServeStaticModule.forRoot({
                 rootPath: (0, path_1.join)(process.cwd(), 'uploads'),
                 serveRoot: '/uploads',
+            }, {
+                rootPath: (0, path_1.join)(process.cwd(), '..', 'images'),
+                serveRoot: '/images',
             }),
             bull_1.BullModule.forRootAsync({
                 imports: [config_1.ConfigModule],

@@ -37,6 +37,7 @@ export declare class AppController {
     deleteTemplate(id: string): Promise<{
         success: boolean;
     }>;
+    private deletePhysicalFile;
     batchDeleteTemplates(ids: string[]): Promise<{
         success: boolean;
     }>;

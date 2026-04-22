@@ -21,7 +21,7 @@ import { join } from 'path';
         serveRoot: '/uploads',
       },
       {
-        rootPath: join(process.cwd(), 'images'),
+        rootPath: join(process.cwd(), '..', 'images'),
         serveRoot: '/images',
       },
     ),

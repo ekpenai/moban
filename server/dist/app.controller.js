@@ -48,6 +48,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
+const multer_1 = require("multer");
 const bull_1 = require("@nestjs/bull");
 const psd_service_1 = require("./psd.service");
 const typeorm_1 = require("@nestjs/typeorm");
@@ -72,6 +73,14 @@ function parseSizeToBytes(input, fallbackBytes) {
     return Math.max(1, Math.floor(value * factor));
 }
 const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
+const imagesStorage = (0, multer_1.diskStorage)({
+    destination: '../images',
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname);
+        cb(null, `img-${uniqueSuffix}${ext}`);
+    },
+});
 let AppController = class AppController {
     psdService;
     renderQueue;
@@ -94,13 +103,15 @@ let AppController = class AppController {
         const proto = protoHeader || req?.protocol || 'http';
         return `${proto}://${host}`.replace(/\/+$/, '');
     }
-    toPublicUploadUrl(filename, req) {
-        return `${this.getPublicBaseUrl(req)}/uploads/${filename}`;
+    toPublicUploadUrl(filename, req, folder = 'uploads') {
+        return `${this.getPublicBaseUrl(req)}/${folder}/${filename}`;
     }
     normalizeUploadUrl(url, req) {
         if (!url || typeof url !== 'string')
             return url;
-        return url.replace(/^https?:\/\/localhost:3000\/uploads\//i, `${this.getPublicBaseUrl(req)}/uploads/`);
+        return url
+            .replace(/^https?:\/\/localhost:3000\/uploads\//i, `${this.getPublicBaseUrl(req)}/uploads/`)
+            .replace(/^https?:\/\/localhost:3000\/images\//i, `${this.getPublicBaseUrl(req)}/images/`);
     }
     normalizeTemplateData(template, req) {
         const normalizedLayers = Array.isArray(template.layers)
@@ -123,7 +134,7 @@ let AppController = class AppController {
         return { data: result };
     }
     async uploadImage(file, req) {
-        const url = this.toPublicUploadUrl(file.filename, req);
+        const url = this.toPublicUploadUrl(file.filename, req, 'images');
         return { url };
     }
     async saveTemplate(body, req) {
@@ -132,13 +143,13 @@ let AppController = class AppController {
             const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
             const buffer = Buffer.from(base64Data, 'base64');
             const filename = `thumb-${Date.now()}.png`;
-            const uploadDir = path.join(process.cwd(), 'uploads');
-            this.logger.log(`Saving thumbnail to: ${path.join(uploadDir, filename)}`);
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
+            const imagesDir = path.join(process.cwd(), '..', 'images');
+            this.logger.log(`Saving thumbnail to: ${path.join(imagesDir, filename)}`);
+            if (!fs.existsSync(imagesDir)) {
+                fs.mkdirSync(imagesDir, { recursive: true });
             }
-            fs.writeFileSync(path.join(uploadDir, filename), buffer);
-            thumbnailPath = this.toPublicUploadUrl(filename, req);
+            fs.writeFileSync(path.join(imagesDir, filename), buffer);
+            thumbnailPath = this.toPublicUploadUrl(filename, req, 'images');
         }
         const template = this.templateRepo.create({
             id: body.id,
@@ -164,12 +175,38 @@ let AppController = class AppController {
         return { data: template ? this.normalizeTemplateData(template, req) : null };
     }
     async deleteTemplate(id) {
+        const template = await this.templateRepo.findOne({ where: { id } });
+        if (template && template.thumbnail) {
+            this.deletePhysicalFile(template.thumbnail);
+        }
         await this.templateRepo.delete(id);
         return { success: true };
+    }
+    deletePhysicalFile(thumbnailUrl) {
+        try {
+            const parts = thumbnailUrl.split('/');
+            const filename = parts[parts.length - 1];
+            if (!filename)
+                return;
+            const filePath = path.join(process.cwd(), '..', 'images', filename);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                this.logger.log(`Deleted physical file: ${filePath}`);
+            }
+        }
+        catch (err) {
+            this.logger.error(`Failed to delete physical file: ${thumbnailUrl}`, err.stack);
+        }
     }
     async batchDeleteTemplates(ids) {
         if (!ids || ids.length === 0)
             return { success: true };
+        const templates = await this.templateRepo.findByIds(ids);
+        for (const template of templates) {
+            if (template.thumbnail) {
+                this.deletePhysicalFile(template.thumbnail);
+            }
+        }
         await this.templateRepo.delete(ids);
         return { success: true };
     }
@@ -228,7 +265,7 @@ __decorate([
 ], AppController.prototype, "uploadPsd", null);
 __decorate([
     (0, common_1.Post)('upload/image'),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { dest: './uploads' })),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { storage: imagesStorage })),
     __param(0, (0, common_1.UploadedFile)()),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),

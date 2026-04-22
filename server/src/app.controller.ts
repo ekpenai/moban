@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PsdService } from './psd.service';
@@ -27,6 +28,15 @@ function parseSizeToBytes(input: string | undefined, fallbackBytes: number): num
 }
 
 const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
+
+const imagesStorage = diskStorage({
+  destination: '../images',
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `img-${uniqueSuffix}${ext}`);
+  },
+});
 
 @Controller()
 export class AppController {
@@ -87,9 +97,9 @@ export class AppController {
   }
 
   @Post('upload/image')
-  @UseInterceptors(FileInterceptor('file', { dest: './uploads' }))
+  @UseInterceptors(FileInterceptor('file', { storage: imagesStorage }))
   async uploadImage(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
-    const url = this.toPublicUploadUrl(file.filename, req);
+    const url = this.toPublicUploadUrl(file.filename, req, 'images');
     return { url };
   }
 
@@ -102,7 +112,7 @@ export class AppController {
       const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
       const buffer = Buffer.from(base64Data, 'base64');
       const filename = `thumb-${Date.now()}.png`;
-      const imagesDir = path.join(process.cwd(), 'images');
+      const imagesDir = path.join(process.cwd(), '..', 'images');
       
       this.logger.log(`Saving thumbnail to: ${path.join(imagesDir, filename)}`);
 
@@ -144,13 +154,44 @@ export class AppController {
 
   @Delete('templates/:id')
   async deleteTemplate(@Param('id') id: string) {
+    const template = await this.templateRepo.findOne({ where: { id } });
+    if (template && template.thumbnail) {
+      this.deletePhysicalFile(template.thumbnail);
+    }
     await this.templateRepo.delete(id);
     return { success: true };
+  }
+
+  private deletePhysicalFile(thumbnailUrl: string) {
+    try {
+      // 提取文件名
+      // URL 格式通常为: http://host:port/images/img-xxx.png
+      const parts = thumbnailUrl.split('/');
+      const filename = parts[parts.length - 1];
+      if (!filename) return;
+
+      const filePath = path.join(process.cwd(), '..', 'images', filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        this.logger.log(`Deleted physical file: ${filePath}`);
+      }
+    } catch (err) {
+      this.logger.error(`Failed to delete physical file: ${thumbnailUrl}`, err.stack);
+    }
   }
 
   @Post('templates/batch-delete')
   async batchDeleteTemplates(@Body('ids') ids: string[]) {
     if (!ids || ids.length === 0) return { success: true };
+    
+    // 获取待删除模板的所有详情
+    const templates = await this.templateRepo.findByIds(ids);
+    for (const template of templates) {
+      if (template.thumbnail) {
+        this.deletePhysicalFile(template.thumbnail);
+      }
+    }
+
     await this.templateRepo.delete(ids);
     return { success: true };
   }

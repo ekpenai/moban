@@ -9,6 +9,7 @@ import {
   Settings2, Palette, RefreshCcw, Edit3, MoveUp, MoveDown
 } from 'lucide-react';
 import { CropModal } from './components/CropModal';
+import { SaveModal } from './components/SaveModal';
 import type { TemplateData } from './types';
 import api from './lib/axios';
 import toast from 'react-hot-toast';
@@ -44,6 +45,7 @@ function App() {
   const [renderResult, setRenderResult] = useState<string | null>(null);
   const [myTemplates, setMyTemplates] = useState<TemplateData[]>([]);
   const [isManageMode, setIsManageMode] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState('全部');
 
@@ -110,44 +112,31 @@ function App() {
     }
   };
 
-  const handleSave = async () => {
+  const handleConfirmSave = async (data: { category: string; thumbnailUrl: string }) => {
     if (!template) return;
-    const nameInput = prompt('项目名称', template.name || '未命名设计');
-    const name = nameInput?.trim();
-    if (!name) return;
-
-    // Defer the second dialog one tick to avoid consecutive prompt blocking in some browsers.
-    const categoryInput = await new Promise<string | null>((resolve) => {
-      window.setTimeout(() => {
-        resolve(prompt('分类名称（如：证件、海报、个人）', template.category || '未分类'));
-      }, 0);
-    });
-    const categoryName = categoryInput?.trim() || '未分类';
+    const name = template.name || '未命名设计';
     
-    setIsSaving(true);
-    let thumbnail = '';
-    
-    // 生成快照
-    if (stageRef) {
-      try {
-        thumbnail = stageRef.toDataURL({ 
-          pixelRatio: 0.3, // 压缩比例以减小存储体积
-          quality: 0.8
-        });
-      } catch (e) {
-        console.warn('快照生成失败:', e);
-      }
-    }
-
     try {
-      await api.post('/templates/save', { ...template, name, thumbnail, category: categoryName });
+      await api.post('/templates/save', { 
+        ...template, 
+        name, 
+        thumbnail: data.thumbnailUrl, 
+        category: data.category 
+      });
+
       toast.success('已保存至云端');
-      postToMiniProgram('saveSuccess', { name, category: categoryName });
+      postToMiniProgram('saveSuccess', { name, category: data.category });
+      setIsSaveModalOpen(false);
       fetchTemplates();
     } catch {
-      postToMiniProgram('saveFail');
-      toast.error('保存失败，请稍后重试');
-    } finally { setIsSaving(false); }
+      toast.error('保存失败，请检查网络或后端状态');
+      throw new Error('Save failed');
+    }
+  };
+
+  const handleSave = () => {
+    if (!template) return;
+    setIsSaveModalOpen(true);
   };
 
   const handleAddText = () => {
@@ -616,6 +605,15 @@ function App() {
           aspect={requestCropInfo.aspect}
           onClose={() => setRequestCropInfo(null)}
           onConfirm={handleCropConfirm}
+        />
+      )}
+
+      {/* 保存弹窗 */}
+      {isSaveModalOpen && (
+        <SaveModal 
+          initialCategory={template?.category}
+          onClose={() => setIsSaveModalOpen(false)}
+          onConfirm={handleConfirmSave}
         />
       )}
     </div>
