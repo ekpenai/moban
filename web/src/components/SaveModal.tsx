@@ -73,8 +73,16 @@ export const SaveModal: React.FC<SaveModalProps> = ({ onClose, onConfirm, initia
         fd.append('file', file);
         const { data } = await api.post('/upload/image', fd);
         finalThumbnailUrl = data.url;
-      } else if (preview && (preview.startsWith('http') || preview.startsWith('data:image') || preview.startsWith('/'))) {
-          finalThumbnailUrl = preview;
+      } else if (preview && preview.startsWith('data:image')) {
+        // 如果是画板自动截取的 base64，将其转换为文件上传到服务器的 images 文件夹中
+        const res = await fetch(preview);
+        const blob = await res.blob();
+        const fd = new FormData();
+        fd.append('file', blob, `thumb-${Date.now()}.png`);
+        const { data } = await api.post('/upload/image', fd);
+        finalThumbnailUrl = data.url;
+      } else if (preview && (preview.startsWith('http') || preview.startsWith('/'))) {
+        finalThumbnailUrl = preview;
       }
       
       await onConfirm({ category, thumbnailUrl: finalThumbnailUrl });
