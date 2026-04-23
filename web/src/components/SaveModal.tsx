@@ -6,11 +6,12 @@ interface SaveModalProps {
   onClose: () => void;
   onConfirm: (data: { category: string; thumbnailUrl: string }) => Promise<void>;
   initialCategory?: string;
+  initialPreview?: string | null;
 }
 
-export const SaveModal: React.FC<SaveModalProps> = ({ onClose, onConfirm, initialCategory = '未分类' }) => {
+export const SaveModal: React.FC<SaveModalProps> = ({ onClose, onConfirm, initialCategory = '未分类', initialPreview = null }) => {
   const [category, setCategory] = useState(initialCategory);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(initialPreview);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,7 +73,7 @@ export const SaveModal: React.FC<SaveModalProps> = ({ onClose, onConfirm, initia
         fd.append('file', file);
         const { data } = await api.post('/upload/image', fd);
         finalThumbnailUrl = data.url;
-      } else if (preview.startsWith('http')) {
+      } else if (preview && (preview.startsWith('http') || preview.startsWith('data:image') || preview.startsWith('/'))) {
           finalThumbnailUrl = preview;
       }
       

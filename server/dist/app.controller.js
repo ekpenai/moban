@@ -138,13 +138,13 @@ let AppController = class AppController {
         return { url };
     }
     async saveTemplate(body, req) {
+        this.logger.log(`Incoming save request: name=${body.name}, category=${body.category}, thumb=${body.thumbnail?.substring(0, 50)}...`);
         let thumbnailPath = body.thumbnail;
         if (body.thumbnail && body.thumbnail.startsWith('data:image')) {
             const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
             const buffer = Buffer.from(base64Data, 'base64');
             const filename = `thumb-${Date.now()}.png`;
             const imagesDir = path.join(process.cwd(), '..', 'images');
-            this.logger.log(`Saving thumbnail to: ${path.join(imagesDir, filename)}`);
             if (!fs.existsSync(imagesDir)) {
                 fs.mkdirSync(imagesDir, { recursive: true });
             }
@@ -161,6 +161,7 @@ let AppController = class AppController {
             category: body.category || '未分类'
         });
         const saved = await this.templateRepo.save(template);
+        this.logger.log(`Template saved successfully: id=${saved.id}, thumbnail=${saved.thumbnail}`);
         return { data: this.normalizeTemplateData(saved, req) };
     }
     async listTemplates(req) {

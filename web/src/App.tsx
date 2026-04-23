@@ -612,6 +612,7 @@ function App() {
       {isSaveModalOpen && (
         <SaveModal 
           initialCategory={template?.category}
+          initialPreview={template?.thumbnail || (stageRef?.current ? stageRef.current.toDataURL({ pixelRatio: 0.5 }) : null)}
           onClose={() => setIsSaveModalOpen(false)}
           onConfirm={handleConfirmSave}
         />

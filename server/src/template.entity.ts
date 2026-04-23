@@ -22,7 +22,7 @@ export class Template {
   @Column('json')
   layers: any;
 
-  @Column({ nullable: true })
+  @Column('text', { nullable: true })
   thumbnail: string;
 
   @Index()

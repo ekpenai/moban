@@ -30,7 +30,13 @@ function parseSizeToBytes(input: string | undefined, fallbackBytes: number): num
 const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
 
 const imagesStorage = diskStorage({
-  destination: '../images',
+  destination: (req, file, cb) => {
+    const imagesDir = path.join(process.cwd(), '..', 'images');
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true });
+    }
+    cb(null, imagesDir);
+  },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname);
@@ -105,17 +111,16 @@ export class AppController {
 
   @Post('templates/save')
   async saveTemplate(@Body() body: SaveTemplateDto, @Req() req: Request) {
+    this.logger.log(`Incoming save request: name=${body.name}, category=${body.category}, thumb=${body.thumbnail?.substring(0, 50)}...`);
     let thumbnailPath = body.thumbnail;
 
-    // 处理 Base64 缩略图
+    // 处理 Base64 缩略图 (如果是旧方式，这里保留兼容)
     if (body.thumbnail && body.thumbnail.startsWith('data:image')) {
       const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
       const buffer = Buffer.from(base64Data, 'base64');
       const filename = `thumb-${Date.now()}.png`;
       const imagesDir = path.join(process.cwd(), '..', 'images');
       
-      this.logger.log(`Saving thumbnail to: ${path.join(imagesDir, filename)}`);
-
       if (!fs.existsSync(imagesDir)) {
         fs.mkdirSync(imagesDir, { recursive: true });
       }
@@ -133,7 +138,9 @@ export class AppController {
       thumbnail: thumbnailPath,
       category: body.category || '未分类'
     });
+    
     const saved = await this.templateRepo.save(template);
+    this.logger.log(`Template saved successfully: id=${saved.id}, thumbnail=${saved.thumbnail}`);
     return { data: this.normalizeTemplateData(saved, req) };
   }
 
