@@ -7,6 +7,7 @@ import { PsdService } from './psd.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Template } from './template.entity';
+import { Setting } from './setting.entity';
 import { SaveTemplateDto, RenderTemplateDto } from './dto/template.dto';
 import { WinstonLoggerService } from './logger.service';
 import * as fs from 'fs';
@@ -44,12 +45,28 @@ const imagesStorage = diskStorage({
   },
 });
 
+const sysImagesStorage = diskStorage({
+  destination: (req, file, cb) => {
+    const imagesDir = path.join(process.cwd(), 'images');
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true });
+    }
+    cb(null, imagesDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `sys-${uniqueSuffix}${ext}`);
+  },
+});
+
 @Controller()
 export class AppController {
   constructor(
     private readonly psdService: PsdService,
     @InjectQueue('renderQueue') private renderQueue: Queue,
     @InjectRepository(Template) private templateRepo: Repository<Template>,
+    @InjectRepository(Setting) private settingRepo: Repository<Setting>,
     private readonly logger: WinstonLoggerService,
   ) {}
 
@@ -107,6 +124,31 @@ export class AppController {
   async uploadImage(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
     const url = this.toPublicUploadUrl(file.filename, req, 'images');
     return { url };
+  }
+
+  @Post('upload/sys-image')
+  @UseInterceptors(FileInterceptor('file', { storage: sysImagesStorage }))
+  async uploadSysImage(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
+    const url = this.toPublicUploadUrl(file.filename, req, 'sys-images');
+    return { url };
+  }
+
+  @Get('settings/:key')
+  async getSetting(@Param('key') key: string) {
+    const setting = await this.settingRepo.findOne({ where: { key } });
+    return { data: setting ? setting.value : null };
+  }
+
+  @Post('settings/:key')
+  async saveSetting(@Param('key') key: string, @Body() body: any) {
+    let setting = await this.settingRepo.findOne({ where: { key } });
+    if (!setting) {
+      setting = this.settingRepo.create({ key, value: body.value });
+    } else {
+      setting.value = body.value;
+    }
+    await this.settingRepo.save(setting);
+    return { success: true, data: setting.value };
   }
 
   @Post('templates/save')

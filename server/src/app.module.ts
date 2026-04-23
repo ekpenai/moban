@@ -4,6 +4,7 @@ import { PsdService } from './psd.service';
 import { WinstonLoggerService } from './logger.service';
 import { CleanupService } from './cleanup.service';
 import { Template } from './template.entity';
+import { Setting } from './setting.entity';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -24,6 +25,10 @@ import { join } from 'path';
         rootPath: join(process.cwd(), '..', 'images'),
         serveRoot: '/images',
       },
+      {
+        rootPath: join(process.cwd(), 'images'),
+        serveRoot: '/sys-images',
+      }
     ),
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -61,12 +66,12 @@ import { join } from 'path';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        entities: [Template],
+        entities: [Template, Setting],
         synchronize: true,
       }),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([Template]),
+    TypeOrmModule.forFeature([Template, Setting]),
   ],
   controllers: [AppController],
   providers: [PsdService, WinstonLoggerService, CleanupService],

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { CropModal } from './components/CropModal';
 import { SaveModal } from './components/SaveModal';
+import { SettingsModal } from './components/SettingsModal';
 import type { TemplateData } from './types';
 import api from './lib/axios';
 import toast from 'react-hot-toast';
@@ -46,6 +47,7 @@ function App() {
   const [myTemplates, setMyTemplates] = useState<TemplateData[]>([]);
   const [isManageMode, setIsManageMode] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState('全部');
 
@@ -349,7 +351,7 @@ function App() {
             ))}
           </div>
           
-          <div className="hidden md:block mt-auto p-1.5 bg-white/70 backdrop-blur-xl rounded-full border border-white/50 shadow-sm cursor-pointer hover:bg-white transition-all active:scale-90">
+          <div onClick={() => setIsSettingsModalOpen(true)} className="hidden md:block mt-auto p-1.5 bg-white/70 backdrop-blur-xl rounded-full border border-white/50 shadow-sm cursor-pointer hover:bg-white transition-all active:scale-90">
             <Settings2 size={20} className="text-slate-400" />
           </div>
         </nav>
@@ -616,6 +618,11 @@ function App() {
           onClose={() => setIsSaveModalOpen(false)}
           onConfirm={handleConfirmSave}
         />
+      )}
+
+      {/* 系统配置弹窗 */}
+      {isSettingsModalOpen && (
+        <SettingsModal onClose={() => setIsSettingsModalOpen(false)} />
       )}
     </div>
   );
