@@ -25,6 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libpng16-16 \
     ca-certificates \
+    fonts-wqy-zenhei \
+    fonts-wqy-microhei \
+    fonts-noto-cjk \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
