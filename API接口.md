@@ -231,7 +231,47 @@
 
 ---
 
-## 4. 小程序推荐对接流程
+## 4. 小程序系统配置与展示接口
+
+### 4.1 获取首页轮播图
+
+- **URL**：`GET /settings/carousel`
+- **用途**：小程序获取 PC 端配置的首页轮播图图片地址列表。
+
+**响应示例**
+```json
+{
+  "data": [
+    "https://.../sys-images/sys-12345.png",
+    "https://.../sys-images/sys-67890.png"
+  ]
+}
+```
+
+### 4.2 获取分类与图标
+
+- **URL**：`GET /settings/categories`
+- **用途**：小程序获取 PC 端配置的模板分类数据（名称和图标）。
+
+**响应示例**
+```json
+{
+  "data": [
+    {
+      "name": "婚庆海报",
+      "icon": "https://.../sys-images/sys-xxxx.png"
+    },
+    {
+      "name": "节日祝福",
+      "icon": "https://.../sys-images/sys-yyyy.png"
+    }
+  ]
+}
+```
+
+---
+
+## 5. 小程序推荐对接流程
 
 1. 模板列表页：`GET /templates`
 2. 进入编辑页：`GET /templates/:id`
