@@ -54,6 +54,7 @@ const psd_service_1 = require("./psd.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const template_entity_1 = require("./template.entity");
+const setting_entity_1 = require("./setting.entity");
 const template_dto_1 = require("./dto/template.dto");
 const logger_service_1 = require("./logger.service");
 const fs = __importStar(require("fs"));
@@ -74,22 +75,44 @@ function parseSizeToBytes(input, fallbackBytes) {
 }
 const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
 const imagesStorage = (0, multer_1.diskStorage)({
-    destination: '../images',
+    destination: (req, file, cb) => {
+        const imagesDir = path.join(process.cwd(), '..', 'images');
+        if (!fs.existsSync(imagesDir)) {
+            fs.mkdirSync(imagesDir, { recursive: true });
+        }
+        cb(null, imagesDir);
+    },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         const ext = path.extname(file.originalname);
         cb(null, `img-${uniqueSuffix}${ext}`);
     },
 });
+const sysImagesStorage = (0, multer_1.diskStorage)({
+    destination: (req, file, cb) => {
+        const imagesDir = path.join(process.cwd(), 'images');
+        if (!fs.existsSync(imagesDir)) {
+            fs.mkdirSync(imagesDir, { recursive: true });
+        }
+        cb(null, imagesDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname);
+        cb(null, `sys-${uniqueSuffix}${ext}`);
+    },
+});
 let AppController = class AppController {
     psdService;
     renderQueue;
     templateRepo;
+    settingRepo;
     logger;
-    constructor(psdService, renderQueue, templateRepo, logger) {
+    constructor(psdService, renderQueue, templateRepo, settingRepo, logger) {
         this.psdService = psdService;
         this.renderQueue = renderQueue;
         this.templateRepo = templateRepo;
+        this.settingRepo = settingRepo;
         this.logger = logger;
     }
     getPublicBaseUrl(req) {
@@ -136,6 +159,25 @@ let AppController = class AppController {
     async uploadImage(file, req) {
         const url = this.toPublicUploadUrl(file.filename, req, 'images');
         return { url };
+    }
+    async uploadSysImage(file, req) {
+        const url = this.toPublicUploadUrl(file.filename, req, 'sys-images');
+        return { url };
+    }
+    async getSetting(key) {
+        const setting = await this.settingRepo.findOne({ where: { key } });
+        return { data: setting ? setting.value : null };
+    }
+    async saveSetting(key, body) {
+        let setting = await this.settingRepo.findOne({ where: { key } });
+        if (!setting) {
+            setting = this.settingRepo.create({ key, value: body.value });
+        }
+        else {
+            setting.value = body.value;
+        }
+        await this.settingRepo.save(setting);
+        return { success: true, data: setting.value };
     }
     async saveTemplate(body, req) {
         this.logger.log(`Incoming save request: name=${body.name}, category=${body.category}, thumb=${body.thumbnail?.substring(0, 50)}...`);
@@ -274,6 +316,30 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "uploadImage", null);
 __decorate([
+    (0, common_1.Post)('upload/sys-image'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { storage: sysImagesStorage })),
+    __param(0, (0, common_1.UploadedFile)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "uploadSysImage", null);
+__decorate([
+    (0, common_1.Get)('settings/:key'),
+    __param(0, (0, common_1.Param)('key')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getSetting", null);
+__decorate([
+    (0, common_1.Post)('settings/:key'),
+    __param(0, (0, common_1.Param)('key')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "saveSetting", null);
+__decorate([
     (0, common_1.Post)('templates/save'),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -328,7 +394,9 @@ exports.AppController = AppController = __decorate([
     (0, common_1.Controller)(),
     __param(1, (0, bull_1.InjectQueue)('renderQueue')),
     __param(2, (0, typeorm_1.InjectRepository)(template_entity_1.Template)),
+    __param(3, (0, typeorm_1.InjectRepository)(setting_entity_1.Setting)),
     __metadata("design:paramtypes", [psd_service_1.PsdService, Object, typeorm_2.Repository,
+        typeorm_2.Repository,
         logger_service_1.WinstonLoggerService])
 ], AppController);
 //# sourceMappingURL=app.controller.js.map

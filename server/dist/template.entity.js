@@ -50,7 +50,7 @@ __decorate([
     __metadata("design:type", Object)
 ], Template.prototype, "layers", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)('text', { nullable: true }),
     __metadata("design:type", String)
 ], Template.prototype, "thumbnail", void 0);
 __decorate([

@@ -13,6 +13,7 @@ const psd_service_1 = require("./psd.service");
 const logger_service_1 = require("./logger.service");
 const cleanup_service_1 = require("./cleanup.service");
 const template_entity_1 = require("./template.entity");
+const setting_entity_1 = require("./setting.entity");
 const serve_static_1 = require("@nestjs/serve-static");
 const config_1 = require("@nestjs/config");
 const schedule_1 = require("@nestjs/schedule");
@@ -33,6 +34,9 @@ exports.AppModule = AppModule = __decorate([
             }, {
                 rootPath: (0, path_1.join)(process.cwd(), '..', 'images'),
                 serveRoot: '/images',
+            }, {
+                rootPath: (0, path_1.join)(process.cwd(), 'images'),
+                serveRoot: '/sys-images',
             }),
             bull_1.BullModule.forRootAsync({
                 imports: [config_1.ConfigModule],
@@ -68,12 +72,12 @@ exports.AppModule = AppModule = __decorate([
                     username: configService.get('DB_USER'),
                     password: configService.get('DB_PASS'),
                     database: configService.get('DB_NAME'),
-                    entities: [template_entity_1.Template],
+                    entities: [template_entity_1.Template, setting_entity_1.Setting],
                     synchronize: true,
                 }),
                 inject: [config_1.ConfigService],
             }),
-            typeorm_1.TypeOrmModule.forFeature([template_entity_1.Template]),
+            typeorm_1.TypeOrmModule.forFeature([template_entity_1.Template, setting_entity_1.Setting]),
         ],
         controllers: [app_controller_1.AppController],
         providers: [psd_service_1.PsdService, logger_service_1.WinstonLoggerService, cleanup_service_1.CleanupService],
