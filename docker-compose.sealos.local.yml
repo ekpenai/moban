@@ -42,7 +42,7 @@ services:
       S3_ACCESS_KEY: ujw2lrwn
       S3_SECRET_KEY: 26mhbpxmjdj8qrnx
       S3_BUCKET_NAME: moban-assets-0424
-      S3_REGION: cn-beijing
+      S3_REGION: us-east-1
       S3_PUBLIC_URL: https://static-host-ujw2lrwn-moban-assets-0424.sealosbja.site
     ports:
       - "3000:3000"

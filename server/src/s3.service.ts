@@ -15,8 +15,10 @@ export class S3Service {
     this.publicUrl = this.configService.get<string>('S3_PUBLIC_URL', 'https://objectstorageapi.bja.sealos.run/moban-assets-0424');
 
     this.s3Client = new S3Client({
-      endpoint: this.configService.get<string>('S3_ENDPOINT', 'https://objectstorageapi.bja.sealos.run'),
-      region: this.configService.get<string>('S3_REGION', 'cn-beijing'),
+      endpoint: process.env.NODE_ENV === 'production' 
+        ? 'http://object-storage.objectstorage-system.svc.cluster.local' 
+        : this.configService.get<string>('S3_ENDPOINT', 'https://objectstorageapi.bja.sealos.run'),
+      region: this.configService.get<string>('S3_REGION', 'us-east-1'),
       credentials: {
         accessKeyId: this.configService.get<string>('S3_ACCESS_KEY', 'ujw2lrwn'),
         secretAccessKey: this.configService.get<string>('S3_SECRET_KEY', '26mhbpxmjdj8qrnx'),
