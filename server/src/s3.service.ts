@@ -1,23 +1,28 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 
 @Injectable()
 export class S3Service {
   private s3Client: S3Client;
   private readonly logger = new Logger(S3Service.name);
-  private readonly bucketName = process.env.S3_BUCKET_NAME || 'moban-assets-0424';
-  private readonly publicUrl = process.env.S3_PUBLIC_URL || 'https://objectstorageapi.bja.sealos.run/moban-assets-0424';
+  private bucketName: string;
+  private publicUrl: string;
 
-  constructor() {
+  constructor(private configService: ConfigService) {
+    this.bucketName = this.configService.get<string>('S3_BUCKET_NAME', 'moban-assets-0424');
+    this.publicUrl = this.configService.get<string>('S3_PUBLIC_URL', 'https://objectstorageapi.bja.sealos.run/moban-assets-0424');
+
     this.s3Client = new S3Client({
-      endpoint: process.env.S3_ENDPOINT || 'https://objectstorageapi.bja.sealos.run',
-      region: process.env.S3_REGION || 'us-east-1',
+      endpoint: process.env.NODE_ENV === 'production' 
+        ? 'http://object-storage.objectstorage-system.svc.cluster.local' 
+        : this.configService.get<string>('S3_ENDPOINT', 'https://objectstorageapi.bja.sealos.run'),
+      region: this.configService.get<string>('S3_REGION', 'us-east-1'),
       credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || 'ujw2lrwn',
-        secretAccessKey: process.env.S3_SECRET_KEY || '26mhbpxmjdj8qrnx',
+        accessKeyId: this.configService.get<string>('S3_ACCESS_KEY', 'ujw2lrwn'),
+        secretAccessKey: this.configService.get<string>('S3_SECRET_KEY', '26mhbpxmjdj8qrnx'),
       },
-      // Force path style is strictly required for Sealos Object Storage
       forcePathStyle: true,
     });
   }
