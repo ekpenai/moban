@@ -17,7 +17,7 @@ export class S3Service {
         accessKeyId: process.env.S3_ACCESS_KEY || 'ujw2lrwn',
         secretAccessKey: process.env.S3_SECRET_KEY || '26mhbpxmjdj8qrnx',
       },
-      // Force path style is often needed for MinIO/Sealos Object Storage
+      // Force path style is strictly required for Sealos Object Storage
       forcePathStyle: true,
     });
   }
@@ -33,7 +33,6 @@ export class S3Service {
         Key: filename,
         Body: buffer,
         ContentType: mimetype,
-        // ACL: 'public-read' // Only needed if bucket is not public-read by default, usually object inherits bucket policy
       });
 
       await this.s3Client.send(command);
