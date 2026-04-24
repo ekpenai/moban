@@ -3,6 +3,8 @@ import { AppModule } from './app.module';
 import { Catch, ArgumentsHost, HttpException, ExceptionFilter, HttpStatus, ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 import { WinstonLoggerService } from './logger.service';
+import * as fs from 'fs';
+import * as path from 'path';
 const compression = require('compression');
 
 @Catch()
@@ -41,6 +43,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
 }
 
 async function bootstrap() {
+  // Ensure static directories exist before starting the app
+  const dirsToEnsure = [
+    path.join(process.cwd(), 'uploads'),
+    path.join(process.cwd(), 'images'),
+    path.join(process.cwd(), '..', 'images'),
+  ];
+  for (const dir of dirsToEnsure) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+
   const app = await NestFactory.create(AppModule);
   const logger = app.get(WinstonLoggerService);
   

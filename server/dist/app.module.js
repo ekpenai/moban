@@ -12,6 +12,7 @@ const app_controller_1 = require("./app.controller");
 const psd_service_1 = require("./psd.service");
 const logger_service_1 = require("./logger.service");
 const cleanup_service_1 = require("./cleanup.service");
+const s3_service_1 = require("./s3.service");
 const template_entity_1 = require("./template.entity");
 const setting_entity_1 = require("./setting.entity");
 const serve_static_1 = require("@nestjs/serve-static");
@@ -80,7 +81,7 @@ exports.AppModule = AppModule = __decorate([
             typeorm_1.TypeOrmModule.forFeature([template_entity_1.Template, setting_entity_1.Setting]),
         ],
         controllers: [app_controller_1.AppController],
-        providers: [psd_service_1.PsdService, logger_service_1.WinstonLoggerService, cleanup_service_1.CleanupService],
+        providers: [psd_service_1.PsdService, logger_service_1.WinstonLoggerService, cleanup_service_1.CleanupService, s3_service_1.S3Service],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map
