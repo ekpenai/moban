@@ -75,6 +75,6 @@ import { join } from 'path';
     TypeOrmModule.forFeature([Template, Setting]),
   ],
   controllers: [AppController],
-  providers: [PsdService, WinstonLoggerService, CleanupService],
+  providers: [PsdService, WinstonLoggerService, CleanupService, S3Service],
 })
 export class AppModule { }
