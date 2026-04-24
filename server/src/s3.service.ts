@@ -15,10 +15,8 @@ export class S3Service {
     this.publicUrl = this.configService.get<string>('S3_PUBLIC_URL', 'https://objectstorageapi.bja.sealos.run/moban-assets-0424');
 
     this.s3Client = new S3Client({
-      endpoint: process.env.NODE_ENV === 'production' 
-        ? 'http://object-storage.objectstorage-system.svc.cluster.local' 
-        : this.configService.get<string>('S3_ENDPOINT', 'https://objectstorageapi.bja.sealos.run'),
-      region: this.configService.get<string>('S3_REGION', 'us-east-1'),
+      endpoint: this.configService.get<string>('S3_ENDPOINT', 'https://objectstorageapi.bja.sealos.run'),
+      region: this.configService.get<string>('S3_REGION', 'cn-beijing'),
       credentials: {
         accessKeyId: this.configService.get<string>('S3_ACCESS_KEY', 'ujw2lrwn'),
         secretAccessKey: this.configService.get<string>('S3_SECRET_KEY', '26mhbpxmjdj8qrnx'),
@@ -74,9 +72,15 @@ export class S3Service {
 
   async deleteFile(fileUrl: string): Promise<void> {
     try {
-      if (!fileUrl.startsWith(this.publicUrl)) return;
+      let key = '';
+      if (fileUrl.startsWith(this.publicUrl)) {
+        key = fileUrl.replace(`${this.publicUrl}/`, '');
+      } else if (fileUrl.includes('objectstorageapi.bja.sealos.run/moban-assets-0424')) {
+        key = fileUrl.split('moban-assets-0424/')[1];
+      } else {
+        return;
+      }
       
-      const key = fileUrl.replace(`${this.publicUrl}/`, '');
       const command = new DeleteObjectCommand({
         Bucket: this.bucketName,
         Key: key,

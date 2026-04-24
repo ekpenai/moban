@@ -182,7 +182,7 @@ export class AppController {
 
   private async deletePhysicalFile(thumbnailUrl: string) {
     try {
-      if (thumbnailUrl.includes('objectstorageapi.bja.sealos.run')) {
+      if (thumbnailUrl.includes('objectstorageapi') || thumbnailUrl.includes('sealosbja.site') || thumbnailUrl.includes('sealos.run')) {
         await this.s3Service.deleteFile(thumbnailUrl);
         return;
       }
