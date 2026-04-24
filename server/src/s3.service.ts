@@ -11,8 +11,8 @@ export class S3Service {
   private publicUrl: string;
 
   constructor(private configService: ConfigService) {
-    this.bucketName = this.configService.get<string>('S3_BUCKET_NAME', 'moban-assets-0424');
-    this.publicUrl = this.configService.get<string>('S3_PUBLIC_URL', 'https://objectstorageapi.bja.sealos.run/moban-assets-0424');
+    this.bucketName = this.configService.get<string>('S3_BUCKET_NAME', 'ujw2lrwn-moban-assets-0424');
+    this.publicUrl = this.configService.get<string>('S3_PUBLIC_URL', 'https://static-host-ujw2lrwn-moban-assets-0424.sealosbja.site');
 
     this.s3Client = new S3Client({
       endpoint: process.env.NODE_ENV === 'production' 
@@ -77,8 +77,8 @@ export class S3Service {
       let key = '';
       if (fileUrl.startsWith(this.publicUrl)) {
         key = fileUrl.replace(`${this.publicUrl}/`, '');
-      } else if (fileUrl.includes('objectstorageapi.bja.sealos.run/moban-assets-0424')) {
-        key = fileUrl.split('moban-assets-0424/')[1];
+      } else if (fileUrl.includes('objectstorageapi.bja.sealos.run/ujw2lrwn-moban-assets-0424')) {
+        key = fileUrl.split('ujw2lrwn-moban-assets-0424/')[1];
       } else {
         return;
       }
