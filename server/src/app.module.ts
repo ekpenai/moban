@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { PsdService } from './psd.service';
 import { WinstonLoggerService } from './logger.service';
 import { CleanupService } from './cleanup.service';
+import { S3Service } from './s3.service';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
 import { ServeStaticModule } from '@nestjs/serve-static';

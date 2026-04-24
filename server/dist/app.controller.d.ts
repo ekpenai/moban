@@ -1,5 +1,6 @@
 import type { Queue } from 'bull';
 import { PsdService } from './psd.service';
+import { S3Service } from './s3.service';
 import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
@@ -8,11 +9,12 @@ import { WinstonLoggerService } from './logger.service';
 import type { Request } from 'express';
 export declare class AppController {
     private readonly psdService;
+    private readonly s3Service;
     private renderQueue;
     private templateRepo;
     private settingRepo;
     private readonly logger;
-    constructor(psdService: PsdService, renderQueue: Queue, templateRepo: Repository<Template>, settingRepo: Repository<Setting>, logger: WinstonLoggerService);
+    constructor(psdService: PsdService, s3Service: S3Service, renderQueue: Queue, templateRepo: Repository<Template>, settingRepo: Repository<Setting>, logger: WinstonLoggerService);
     private getPublicBaseUrl;
     private toPublicUploadUrl;
     private normalizeUploadUrl;

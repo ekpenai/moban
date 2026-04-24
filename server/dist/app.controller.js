@@ -51,6 +51,7 @@ const platform_express_1 = require("@nestjs/platform-express");
 const multer_1 = require("multer");
 const bull_1 = require("@nestjs/bull");
 const psd_service_1 = require("./psd.service");
+const s3_service_1 = require("./s3.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const template_entity_1 = require("./template.entity");
@@ -74,42 +75,16 @@ function parseSizeToBytes(input, fallbackBytes) {
     return Math.max(1, Math.floor(value * factor));
 }
 const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
-const imagesStorage = (0, multer_1.diskStorage)({
-    destination: (req, file, cb) => {
-        const imagesDir = path.join(process.cwd(), '..', 'images');
-        if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
-        }
-        cb(null, imagesDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        const ext = path.extname(file.originalname);
-        cb(null, `img-${uniqueSuffix}${ext}`);
-    },
-});
-const sysImagesStorage = (0, multer_1.diskStorage)({
-    destination: (req, file, cb) => {
-        const imagesDir = path.join(process.cwd(), 'images');
-        if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
-        }
-        cb(null, imagesDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        const ext = path.extname(file.originalname);
-        cb(null, `sys-${uniqueSuffix}${ext}`);
-    },
-});
 let AppController = class AppController {
     psdService;
+    s3Service;
     renderQueue;
     templateRepo;
     settingRepo;
     logger;
-    constructor(psdService, renderQueue, templateRepo, settingRepo, logger) {
+    constructor(psdService, s3Service, renderQueue, templateRepo, settingRepo, logger) {
         this.psdService = psdService;
+        this.s3Service = s3Service;
         this.renderQueue = renderQueue;
         this.templateRepo = templateRepo;
         this.settingRepo = settingRepo;
@@ -157,11 +132,15 @@ let AppController = class AppController {
         return { data: result };
     }
     async uploadImage(file, req) {
-        const url = this.toPublicUploadUrl(file.filename, req, 'images');
+        if (!file)
+            throw new common_1.BadRequestException('No file uploaded');
+        const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'images');
         return { url };
     }
     async uploadSysImage(file, req) {
-        const url = this.toPublicUploadUrl(file.filename, req, 'sys-images');
+        if (!file)
+            throw new common_1.BadRequestException('No file uploaded');
+        const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'sys-images');
         return { url };
     }
     async getSetting(key) {
@@ -183,15 +162,13 @@ let AppController = class AppController {
         this.logger.log(`Incoming save request: name=${body.name}, category=${body.category}, thumb=${body.thumbnail?.substring(0, 50)}...`);
         let thumbnailPath = body.thumbnail;
         if (body.thumbnail && body.thumbnail.startsWith('data:image')) {
-            const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
-            const buffer = Buffer.from(base64Data, 'base64');
-            const filename = `thumb-${Date.now()}.png`;
-            const imagesDir = path.join(process.cwd(), '..', 'images');
-            if (!fs.existsSync(imagesDir)) {
-                fs.mkdirSync(imagesDir, { recursive: true });
+            try {
+                thumbnailPath = await this.s3Service.uploadBase64(body.thumbnail, 'images');
             }
-            fs.writeFileSync(path.join(imagesDir, filename), buffer);
-            thumbnailPath = this.toPublicUploadUrl(filename, req, 'images');
+            catch (err) {
+                this.logger.error('Failed to upload thumbnail to S3', err);
+                throw new common_1.BadRequestException('上传缩略图失败');
+            }
         }
         const template = this.templateRepo.create({
             id: body.id,
@@ -220,13 +197,17 @@ let AppController = class AppController {
     async deleteTemplate(id) {
         const template = await this.templateRepo.findOne({ where: { id } });
         if (template && template.thumbnail) {
-            this.deletePhysicalFile(template.thumbnail);
+            await this.deletePhysicalFile(template.thumbnail);
         }
         await this.templateRepo.delete(id);
         return { success: true };
     }
-    deletePhysicalFile(thumbnailUrl) {
+    async deletePhysicalFile(thumbnailUrl) {
         try {
+            if (thumbnailUrl.includes('objectstorageapi.bja.sealos.run')) {
+                await this.s3Service.deleteFile(thumbnailUrl);
+                return;
+            }
             const parts = thumbnailUrl.split('/');
             const filename = parts[parts.length - 1];
             if (!filename)
@@ -247,7 +228,7 @@ let AppController = class AppController {
         const templates = await this.templateRepo.findByIds(ids);
         for (const template of templates) {
             if (template.thumbnail) {
-                this.deletePhysicalFile(template.thumbnail);
+                await this.deletePhysicalFile(template.thumbnail);
             }
         }
         await this.templateRepo.delete(ids);
@@ -308,7 +289,7 @@ __decorate([
 ], AppController.prototype, "uploadPsd", null);
 __decorate([
     (0, common_1.Post)('upload/image'),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { storage: imagesStorage })),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { storage: (0, multer_1.memoryStorage)() })),
     __param(0, (0, common_1.UploadedFile)()),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -317,7 +298,7 @@ __decorate([
 ], AppController.prototype, "uploadImage", null);
 __decorate([
     (0, common_1.Post)('upload/sys-image'),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { storage: sysImagesStorage })),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { storage: (0, multer_1.memoryStorage)() })),
     __param(0, (0, common_1.UploadedFile)()),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -392,10 +373,11 @@ __decorate([
 ], AppController.prototype, "getRenderStatus", null);
 exports.AppController = AppController = __decorate([
     (0, common_1.Controller)(),
-    __param(1, (0, bull_1.InjectQueue)('renderQueue')),
-    __param(2, (0, typeorm_1.InjectRepository)(template_entity_1.Template)),
-    __param(3, (0, typeorm_1.InjectRepository)(setting_entity_1.Setting)),
-    __metadata("design:paramtypes", [psd_service_1.PsdService, Object, typeorm_2.Repository,
+    __param(2, (0, bull_1.InjectQueue)('renderQueue')),
+    __param(3, (0, typeorm_1.InjectRepository)(template_entity_1.Template)),
+    __param(4, (0, typeorm_1.InjectRepository)(setting_entity_1.Setting)),
+    __metadata("design:paramtypes", [psd_service_1.PsdService,
+        s3_service_1.S3Service, Object, typeorm_2.Repository,
         typeorm_2.Repository,
         logger_service_1.WinstonLoggerService])
 ], AppController);

@@ -1,9 +1,10 @@
 import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage, diskStorage } from 'multer';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PsdService } from './psd.service';
+import { S3Service } from './s3.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Template } from './template.entity';
@@ -30,40 +31,11 @@ function parseSizeToBytes(input: string | undefined, fallbackBytes: number): num
 
 const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
 
-const imagesStorage = diskStorage({
-  destination: (req, file, cb) => {
-    const imagesDir = path.join(process.cwd(), '..', 'images');
-    if (!fs.existsSync(imagesDir)) {
-      fs.mkdirSync(imagesDir, { recursive: true });
-    }
-    cb(null, imagesDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `img-${uniqueSuffix}${ext}`);
-  },
-});
-
-const sysImagesStorage = diskStorage({
-  destination: (req, file, cb) => {
-    const imagesDir = path.join(process.cwd(), 'images');
-    if (!fs.existsSync(imagesDir)) {
-      fs.mkdirSync(imagesDir, { recursive: true });
-    }
-    cb(null, imagesDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `sys-${uniqueSuffix}${ext}`);
-  },
-});
-
 @Controller()
 export class AppController {
   constructor(
     private readonly psdService: PsdService,
+    private readonly s3Service: S3Service,
     @InjectQueue('renderQueue') private renderQueue: Queue,
     @InjectRepository(Template) private templateRepo: Repository<Template>,
     @InjectRepository(Setting) private settingRepo: Repository<Setting>,
@@ -120,16 +92,18 @@ export class AppController {
   }
 
   @Post('upload/image')
-  @UseInterceptors(FileInterceptor('file', { storage: imagesStorage }))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   async uploadImage(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
-    const url = this.toPublicUploadUrl(file.filename, req, 'images');
+    if (!file) throw new BadRequestException('No file uploaded');
+    const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'images');
     return { url };
   }
 
   @Post('upload/sys-image')
-  @UseInterceptors(FileInterceptor('file', { storage: sysImagesStorage }))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   async uploadSysImage(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
-    const url = this.toPublicUploadUrl(file.filename, req, 'sys-images');
+    if (!file) throw new BadRequestException('No file uploaded');
+    const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'sys-images');
     return { url };
   }
 
@@ -156,19 +130,14 @@ export class AppController {
     this.logger.log(`Incoming save request: name=${body.name}, category=${body.category}, thumb=${body.thumbnail?.substring(0, 50)}...`);
     let thumbnailPath = body.thumbnail;
 
-    // 处理 Base64 缩略图 (如果是旧方式，这里保留兼容)
+    // 处理 Base64 缩略图
     if (body.thumbnail && body.thumbnail.startsWith('data:image')) {
-      const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      const filename = `thumb-${Date.now()}.png`;
-      const imagesDir = path.join(process.cwd(), '..', 'images');
-      
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
+      try {
+        thumbnailPath = await this.s3Service.uploadBase64(body.thumbnail, 'images');
+      } catch (err) {
+        this.logger.error('Failed to upload thumbnail to S3', err);
+        throw new BadRequestException('上传缩略图失败');
       }
-
-      fs.writeFileSync(path.join(imagesDir, filename), buffer);
-      thumbnailPath = this.toPublicUploadUrl(filename, req, 'images');
     }
 
     const template = this.templateRepo.create({
@@ -205,14 +174,19 @@ export class AppController {
   async deleteTemplate(@Param('id') id: string) {
     const template = await this.templateRepo.findOne({ where: { id } });
     if (template && template.thumbnail) {
-      this.deletePhysicalFile(template.thumbnail);
+      await this.deletePhysicalFile(template.thumbnail);
     }
     await this.templateRepo.delete(id);
     return { success: true };
   }
 
-  private deletePhysicalFile(thumbnailUrl: string) {
+  private async deletePhysicalFile(thumbnailUrl: string) {
     try {
+      if (thumbnailUrl.includes('objectstorageapi.bja.sealos.run')) {
+        await this.s3Service.deleteFile(thumbnailUrl);
+        return;
+      }
+
       // 提取文件名
       // URL 格式通常为: http://host:port/images/img-xxx.png
       const parts = thumbnailUrl.split('/');
@@ -237,7 +211,7 @@ export class AppController {
     const templates = await this.templateRepo.findByIds(ids);
     for (const template of templates) {
       if (template.thumbnail) {
-        this.deletePhysicalFile(template.thumbnail);
+        await this.deletePhysicalFile(template.thumbnail);
       }
     }
 
