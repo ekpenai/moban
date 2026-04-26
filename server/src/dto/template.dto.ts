@@ -35,3 +35,11 @@ export class RenderTemplateDto {
     layers: any[];
   };
 }
+
+export class FillTemplateDto {
+  @IsObject()
+  template: any;
+
+  @IsObject()
+  fieldsData: Record<string, any>;
+}

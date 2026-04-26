@@ -80,6 +80,22 @@
         "height": 1200,
         "url": "https://.../uploads/xxx.png",
         "editable": true
+      },
+      {
+        "id": "layer_2",
+        "type": "text",
+        "name": "标题",
+        "x": 100,
+        "y": 200,
+        "width": 200,
+        "height": 50,
+        "text": "我们结婚啦",
+        "fontSize": 36,
+        "color": "rgba(255, 0, 0, 1)",
+        "fontFamily": "SimHei",
+        "textAlign": "center",
+        "direction": "ltr",
+        "editable": true
       }
     ]
   }

@@ -147,11 +147,32 @@ async function renderImage(template: any): Promise<string> {
       // Create SVG text layer to composite into Sharp
       const padding = 10;
       const color = typeof layer.color === 'string' ? layer.color : '#000000';
+      const fontFamily = layer.fontFamily ? escapeXml(layer.fontFamily) + ', Arial, sans-serif' : 'Arial, sans-serif';
+      const direction = layer.direction === 'rtl' ? 'rtl' : 'ltr';
+      const align = layer.textAlign || 'left';
+      
       const svgW = Math.max(1, Math.round(layer.width + padding));
       const svgH = Math.max(1, Math.round(layer.height + padding));
+      
+      let textAnchor = 'start';
+      let xPos = 0;
+      
+      if (align === 'center') {
+        textAnchor = 'middle';
+        xPos = svgW / 2;
+      } else if (align === 'right' || (direction === 'rtl' && align !== 'left')) {
+        textAnchor = 'end';
+        xPos = svgW;
+      }
+
+      // 处理 autoScale 缩放逻辑
+      const autoScaleProps = layer.autoScale 
+        ? `textLength="${Math.max(1, layer.width)}" lengthAdjust="spacingAndGlyphs"`
+        : '';
+
       const svgText = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}">
-          <text x="0" y="${Math.round(layer.fontSize)}" font-size="${layer.fontSize}" font-family="Arial, sans-serif" fill="${escapeXml(color)}">
+          <text x="${xPos}" y="${Math.round(layer.fontSize)}" font-size="${layer.fontSize}" font-family="${fontFamily}" fill="${escapeXml(color)}" text-anchor="${textAnchor}" direction="${direction}" ${autoScaleProps}>
             ${escapeXml(String(layer.text))}
           </text>
         </svg>

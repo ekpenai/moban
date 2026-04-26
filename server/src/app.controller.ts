@@ -9,7 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
-import { SaveTemplateDto, RenderTemplateDto } from './dto/template.dto';
+import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
 import { WinstonLoggerService } from './logger.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -66,7 +66,56 @@ export class AppController {
       .replace(/^https?:\/\/localhost:3000\/images\//i, `${this.getPublicBaseUrl(req)}/images/`);
   }
 
-  private normalizeTemplateData(template: Template, req?: Request): Template {
+  private extractFieldsFromLayers(layers: any[]) {
+    const regex = /【(.*?)】/g;
+    const fields = [];
+    const fieldMap = new Map();
+
+    for (const layer of layers) {
+      if (layer.type === 'text' && layer.text) {
+        let match;
+        while ((match = regex.exec(layer.text)) !== null) {
+          const raw = match[1];
+          const parts = raw.split('|');
+          const keyTypeStr = parts[0];
+          const value = parts[1] || '';
+          
+          const [key, type] = keyTypeStr.split(':');
+          
+          let max = undefined;
+          let autoScale = false;
+          
+          for (let i = 2; i < parts.length; i++) {
+            if (parts[i].startsWith('max=')) {
+              max = parseInt(parts[i].replace('max=', ''), 10);
+            } else if (parts[i] === 'autoScale') {
+              autoScale = true;
+            }
+          }
+
+          const textBefore = layer.text.substring(0, match.index);
+          const labelMatch = textBefore.match(/([^\s:：\n]+)[:：]?\s*$/);
+          const label = labelMatch ? labelMatch[1] : key;
+
+          if (!fieldMap.has(key)) {
+            const fieldObj = {
+              key,
+              label,
+              type: type || 'text',
+              value: value,
+              ...(max !== undefined && { max }),
+              ...(autoScale && { autoScale })
+            };
+            fieldMap.set(key, fieldObj);
+            fields.push(fieldObj);
+          }
+        }
+      }
+    }
+    return fields;
+  }
+
+  private normalizeTemplateData(template: Template, req?: Request): any {
     const normalizedLayers = Array.isArray(template.layers)
       ? template.layers.map((layer: any) => ({
           ...layer,
@@ -74,10 +123,66 @@ export class AppController {
         }))
       : template.layers;
 
+    const fields = this.extractFieldsFromLayers(normalizedLayers || []);
+
     return {
       ...template,
       thumbnail: this.normalizeUploadUrl(template.thumbnail, req) || '',
       layers: normalizedLayers as any,
+      fields,
+    };
+  }
+
+  @Post('templates/fill')
+  async fillTemplateFields(@Body() body: FillTemplateDto, @Req() req: Request) {
+    const { template, fieldsData } = body;
+    if (!template || !template.layers) {
+      throw new BadRequestException('Invalid template provided');
+    }
+
+    const newLayers = template.layers.map((layer: any) => {
+      if (layer.type === 'text' && layer.text) {
+        let newText = layer.text;
+        const regex = /【(.*?)】/g;
+        
+        let match;
+        // Check if we need autoScale
+        let layerAutoScale = false;
+
+        newText = newText.replace(regex, (_, raw) => {
+          const parts = raw.split('|');
+          const [key] = parts[0].split(':');
+          
+          let max = undefined;
+          for (let i = 2; i < parts.length; i++) {
+            if (parts[i].startsWith('max=')) {
+              max = parseInt(parts[i].replace('max=', ''), 10);
+            } else if (parts[i] === 'autoScale') {
+              layerAutoScale = true;
+            }
+          }
+
+          let val = fieldsData[key] !== undefined ? String(fieldsData[key]) : (parts[1] || '');
+          if (max !== undefined && val.length > max) {
+            val = val.substring(0, max);
+          }
+          return val;
+        });
+
+        return {
+          ...layer,
+          text: newText,
+          autoScale: layerAutoScale || layer.autoScale
+        };
+      }
+      return layer;
+    });
+
+    return {
+      data: {
+        ...template,
+        layers: newLayers
+      }
     };
   }
 

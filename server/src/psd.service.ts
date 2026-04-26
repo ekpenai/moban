@@ -30,17 +30,51 @@ export class PsdService {
         let fontSize = undefined;
         let color = undefined;
         let url = undefined;
+        let fontFamily = undefined;
+        let textAlign = undefined;
+        let direction = undefined;
         
-        // Very basic ag-psd text extraction logic
         if (layer.text) {
           type = 'text';
           text = layer.text.text;
-          // ag-psd doesn't expose all font styles reliably without deeper parsing, we hardcode fallback for demo
-          fontSize = 24; 
-          color = '#000000';
+          
+          const textStyle = layer.text.style || (layer.text.styleRuns && layer.text.styleRuns[0] ? layer.text.styleRuns[0].style : null);
+          const paragraphStyle = layer.text.paragraphStyle || (layer.text.paragraphStyleRuns && layer.text.paragraphStyleRuns[0] ? layer.text.paragraphStyleRuns[0].style : null);
+          
+          if (textStyle) {
+            // Apply scale from transform if present
+            const scaleY = layer.text.transform && layer.text.transform.length >= 4 ? layer.text.transform[3] : 1;
+            fontSize = textStyle.fontSize ? Math.round(textStyle.fontSize * scaleY) : 24;
+            fontFamily = textStyle.font ? textStyle.font.name : 'Arial';
+            
+            if (textStyle.fillColor) {
+              const c = textStyle.fillColor as any;
+              if (c.r !== undefined && c.g !== undefined && c.b !== undefined) {
+                color = `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${c.a ?? 1})`;
+              } else if (c.fr !== undefined && c.fg !== undefined && c.fb !== undefined) {
+                color = `rgba(${Math.round(c.fr)}, ${Math.round(c.fg)}, ${Math.round(c.fb)}, 1)`;
+              } else {
+                color = '#000000';
+              }
+            } else {
+              color = '#000000';
+            }
+
+            direction = textStyle.characterDirection === 1 ? 'rtl' : 'ltr';
+          } else {
+            fontSize = 24;
+            color = '#000000';
+            fontFamily = 'Arial';
+            direction = 'ltr';
+          }
+
+          if (paragraphStyle) {
+            textAlign = paragraphStyle.justification || 'left';
+            if (textAlign.startsWith('justify')) textAlign = 'justify';
+          } else {
+            textAlign = 'left';
+          }
         } else if (layer.canvas) {
-          // In a real scenario we would upload this canvas dataUrl to OSS and get url.
-          // For demo, we just convert to data base64.
           url = layer.canvas.toDataURL('image/png');
         }
 
@@ -58,6 +92,9 @@ export class PsdService {
           text,
           fontSize,
           color,
+          fontFamily,
+          textAlign,
+          direction,
           url,
           editable: true,
         });
