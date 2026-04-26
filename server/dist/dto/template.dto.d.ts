@@ -14,3 +14,7 @@ export declare class RenderTemplateDto {
         layers: any[];
     };
 }
+export declare class FillTemplateDto {
+    template: any;
+    fieldsData: Record<string, any>;
+}

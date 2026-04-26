@@ -149,7 +149,7 @@ export class AppController {
         // Check if we need autoScale
         let layerAutoScale = false;
 
-        newText = newText.replace(regex, (_, raw) => {
+        newText = newText.replace(regex, (_: string, raw: string) => {
           const parts = raw.split('|');
           const [key] = parts[0].split(':');
           

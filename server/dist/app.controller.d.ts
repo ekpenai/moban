@@ -4,7 +4,7 @@ import { S3Service } from './s3.service';
 import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
-import { SaveTemplateDto, RenderTemplateDto } from './dto/template.dto';
+import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
 import { WinstonLoggerService } from './logger.service';
 import type { Request } from 'express';
 export declare class AppController {
@@ -18,7 +18,11 @@ export declare class AppController {
     private getPublicBaseUrl;
     private toPublicUploadUrl;
     private normalizeUploadUrl;
+    private extractFieldsFromLayers;
     private normalizeTemplateData;
+    fillTemplateFields(body: FillTemplateDto, req: Request): Promise<{
+        data: any;
+    }>;
     uploadPsd(file: Express.Multer.File): Promise<{
         data: {
             width: number;
@@ -40,13 +44,13 @@ export declare class AppController {
         data: any;
     }>;
     saveTemplate(body: SaveTemplateDto, req: Request): Promise<{
-        data: Template;
+        data: any;
     }>;
     listTemplates(req: Request): Promise<{
-        data: Template[];
+        data: any[];
     }>;
     getTemplateDetail(id: string, req: Request): Promise<{
-        data: Template | null;
+        data: any;
     }>;
     deleteTemplate(id: string): Promise<{
         success: boolean;

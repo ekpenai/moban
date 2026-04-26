@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RenderTemplateDto = exports.SaveTemplateDto = void 0;
+exports.FillTemplateDto = exports.RenderTemplateDto = exports.SaveTemplateDto = void 0;
 const class_validator_1 = require("class-validator");
 class SaveTemplateDto {
     id;
@@ -61,4 +61,17 @@ __decorate([
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
 ], RenderTemplateDto.prototype, "template", void 0);
+class FillTemplateDto {
+    template;
+    fieldsData;
+}
+exports.FillTemplateDto = FillTemplateDto;
+__decorate([
+    (0, class_validator_1.IsObject)(),
+    __metadata("design:type", Object)
+], FillTemplateDto.prototype, "template", void 0);
+__decorate([
+    (0, class_validator_1.IsObject)(),
+    __metadata("design:type", Object)
+], FillTemplateDto.prototype, "fieldsData", void 0);
 //# sourceMappingURL=template.dto.js.map
