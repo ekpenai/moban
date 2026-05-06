@@ -73,19 +73,28 @@ const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, o
     if (!node || !image) return;
 
     // Use alpha-based hit map so transparent pixels don't block clicks.
-    node.clearCache();
-    node.cache({
-      x: 0,
-      y: 0,
-      width: Math.max(1, layer.width),
-      height: Math.max(1, layer.height),
-      pixelRatio: 1,
-    });
-    node.drawHitFromCache(1);
+    if (typeof node.clearCache === 'function') {
+      node.clearCache();
+    }
+    if (typeof node.cache === 'function') {
+      node.cache({
+        x: 0,
+        y: 0,
+        width: Math.max(1, layer.width),
+        height: Math.max(1, layer.height),
+        pixelRatio: 1,
+      });
+    }
+    if (typeof node.drawHitFromCache === 'function') {
+      node.drawHitFromCache(1);
+    }
+    
     node.getLayer()?.batchDraw();
 
     return () => {
-      node.clearCache();
+      if (typeof node.clearCache === 'function') {
+        node.clearCache();
+      }
     };
   }, [image, maskImage, layer.width, layer.height]);
 
