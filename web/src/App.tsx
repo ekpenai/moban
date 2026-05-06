@@ -97,10 +97,10 @@ function App() {
       setMaskInfo({
         id: replaceLayer.id,
         name: replaceLayer.name,
-        x: replaceLayer.x,
-        y: replaceLayer.y,
-        width: replaceLayer.width,
-        height: replaceLayer.height,
+        x: replaceLayer.maskRect ? replaceLayer.maskRect.x : replaceLayer.x,
+        y: replaceLayer.maskRect ? replaceLayer.maskRect.y : replaceLayer.y,
+        width: replaceLayer.maskRect ? replaceLayer.maskRect.width : replaceLayer.width,
+        height: replaceLayer.maskRect ? replaceLayer.maskRect.height : replaceLayer.height,
         url: replaceLayer.maskUrl || replaceLayer.url,
         type: replaceLayer.type
       });

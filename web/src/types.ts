@@ -14,6 +14,12 @@ export interface TemplateLayer {
   color?: string;
   url?: string;
   maskUrl?: string;
+  maskRect?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
   editable: boolean;
 }
 

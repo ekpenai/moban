@@ -62,7 +62,31 @@ const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, o
       const img = new window.Image();
       img.crossOrigin = 'Anonymous';
       img.src = layer.maskUrl;
-      img.onload = () => setMaskImage(img);
+      img.onload = () => {
+        // Convert grayscale mask (white=visible, black=hidden) to alpha mask
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            // R channel holds the brightness in grayscale
+            const brightness = data[i]; 
+            // Set Alpha to brightness (black -> transparent, white -> opaque)
+            data[i + 3] = brightness;
+          }
+          ctx.putImageData(imageData, 0, 0);
+          
+          const alphaImg = new window.Image();
+          alphaImg.onload = () => setMaskImage(alphaImg);
+          alphaImg.src = canvas.toDataURL('image/png');
+        } else {
+          setMaskImage(img);
+        }
+      };
     } else {
       setMaskImage(null);
     }
@@ -140,8 +164,10 @@ const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, o
         {maskImage && (
           <KonvaImage
             image={maskImage as any}
-            width={layer.width}
-            height={layer.height}
+            x={layer.maskRect ? layer.maskRect.x - layer.x : 0}
+            y={layer.maskRect ? layer.maskRect.y - layer.y : 0}
+            width={layer.maskRect ? layer.maskRect.width : layer.width}
+            height={layer.maskRect ? layer.maskRect.height : layer.height}
             globalCompositeOperation="destination-in"
           />
         )}
