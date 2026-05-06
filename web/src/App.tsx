@@ -93,6 +93,7 @@ function App() {
     }
 
     if (replaceLayer) {
+      setSelectedId(replaceLayer.id);
       setMaskInfo({
         id: replaceLayer.id,
         name: replaceLayer.name,
@@ -645,59 +646,62 @@ function App() {
         </div>
       )}
 
-      {/* 蒙版信息展示弹窗 */}
+      {/* 蒙版信息悬浮面板 - 直观展示在当前页面 */}
       {maskInfo && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-[24px] w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-6 pb-2">
-              <h3 className="text-lg font-black text-slate-800">替换图层蒙版信息</h3>
-              <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">API Response Data</p>
+        <div className="absolute top-20 right-6 z-[90] w-72 bg-white/80 backdrop-blur-2xl rounded-[24px] shadow-2xl border border-white p-5 animate-in slide-in-from-right-8 duration-500">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                <Layout size={16} className="text-indigo-500" />
+                替换蒙版数据
+              </h3>
+              <p className="text-[9px] uppercase font-bold text-slate-400 mt-0.5 tracking-wider">Mask API Info</p>
             </div>
-            
-            <div className="p-6 bg-slate-50 border-y border-slate-100 flex-1 overflow-y-auto">
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Width</span>
-                    <p className="text-sm font-black text-slate-700 mt-0.5">{Math.round(maskInfo.width)} px</p>
-                  </div>
-                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Height</span>
-                    <p className="text-sm font-black text-slate-700 mt-0.5">{Math.round(maskInfo.height)} px</p>
-                  </div>
-                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">X Position</span>
-                    <p className="text-sm font-black text-slate-700 mt-0.5">{Math.round(maskInfo.x)} px</p>
-                  </div>
-                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Y Position</span>
-                    <p className="text-sm font-black text-slate-700 mt-0.5">{Math.round(maskInfo.y)} px</p>
-                  </div>
-                </div>
-                
-                {maskInfo.url && (
-                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Preview</span>
-                    <img src={maskInfo.url} className="w-full h-auto max-h-32 object-contain rounded-lg bg-slate-100" alt="mask preview" />
-                  </div>
-                )}
-                
-                <div className="bg-slate-800 p-3 rounded-xl shadow-sm">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Raw JSON</span>
-                  <pre className="text-[10px] text-emerald-400 font-mono whitespace-pre-wrap break-all">
-                    {JSON.stringify(maskInfo, null, 2)}
-                  </pre>
-                </div>
+            <button 
+              onClick={() => setMaskInfo(null)}
+              className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all active:scale-90"
+            >
+              &times;
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">宽度 (W)</span>
+                <p className="text-sm font-black text-indigo-600">{Math.round(maskInfo.width)} <span className="text-[10px] text-slate-400">px</span></p>
+              </div>
+              <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">高度 (H)</span>
+                <p className="text-sm font-black text-indigo-600">{Math.round(maskInfo.height)} <span className="text-[10px] text-slate-400">px</span></p>
+              </div>
+              <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X 坐标</span>
+                <p className="text-sm font-black text-slate-700">{Math.round(maskInfo.x)} <span className="text-[10px] text-slate-400">px</span></p>
+              </div>
+              <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y 坐标</span>
+                <p className="text-sm font-black text-slate-700">{Math.round(maskInfo.y)} <span className="text-[10px] text-slate-400">px</span></p>
               </div>
             </div>
-
-            <div className="p-4 flex justify-end gap-2">
-              <button 
-                onClick={() => setMaskInfo(null)}
-                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
-              >
-                关闭
-              </button>
+            
+            {maskInfo.url && (
+              <div className="bg-slate-50 p-2 rounded-2xl border border-slate-100 relative group overflow-hidden">
+                <span className="absolute top-2 left-3 text-[9px] font-bold text-slate-500 bg-white/80 backdrop-blur px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm z-10">预览图像</span>
+                <div className="h-28 flex items-center justify-center p-2">
+                  <img src={maskInfo.url} className="max-w-full max-h-full object-contain rounded-xl drop-shadow-md group-hover:scale-105 transition-all duration-500" alt="mask preview" />
+                </div>
+              </div>
+            )}
+            
+            <div className="bg-slate-800 p-3 rounded-2xl shadow-inner relative overflow-hidden group">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                JSON 缩略
+              </span>
+              <pre className="text-[9px] text-emerald-400/90 font-mono whitespace-pre-wrap break-all leading-relaxed">
+                {JSON.stringify({ ...maskInfo, url: maskInfo.url ? `data:image/png;base64,...(${Math.round(maskInfo.url.length/1024)}kb)` : undefined }, null, 2)}
+              </pre>
             </div>
           </div>
         </div>
