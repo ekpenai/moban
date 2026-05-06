@@ -44,7 +44,8 @@ const useContainerSize = (ref: React.RefObject<HTMLDivElement>) => {
 
 const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, onDblClick }: any) => {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const shapeRef = useRef<any>(null);
+  const [maskImage, setMaskImage] = useState<HTMLImageElement | null>(null);
+  const groupRef = useRef<any>(null);
   const trRef = useRef<any>(null);
 
   useEffect(() => {
@@ -57,8 +58,19 @@ const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, o
   }, [layer.url]);
 
   useEffect(() => {
-    if (!image || !shapeRef.current) return;
-    const node = shapeRef.current;
+    if (layer.maskUrl) {
+      const img = new window.Image();
+      img.crossOrigin = 'Anonymous';
+      img.src = layer.maskUrl;
+      img.onload = () => setMaskImage(img);
+    } else {
+      setMaskImage(null);
+    }
+  }, [layer.maskUrl]);
+
+  useEffect(() => {
+    const node = groupRef.current;
+    if (!node || !image) return;
 
     // Use alpha-based hit map so transparent pixels don't block clicks.
     node.clearCache();
@@ -75,42 +87,57 @@ const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, o
     return () => {
       node.clearCache();
     };
-  }, [image, layer.width, layer.height]);
+  }, [image, maskImage, layer.width, layer.height]);
 
   useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
-      trRef.current.nodes([shapeRef.current]);
+    if (isSelected && trRef.current && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
       trRef.current.getLayer().batchDraw();
     }
   }, [isSelected]);
 
   return (
     <React.Fragment>
-      <KonvaImage
-        image={image as any}
-        onClick={onSelect}
-        onTap={onSelect}
-        onDblClick={onDblClick}
-        onDblTap={onDblClick}
-        onMouseEnter={() => onHover(layer.id)}
-        onMouseLeave={() => onHover(null)}
-        ref={shapeRef}
-        {...layer}
+      <Group
+        ref={groupRef}
+        x={layer.x} y={layer.y} rotation={layer.rotation}
+        width={layer.width} height={layer.height}
         draggable={layer.editable}
         onDragEnd={(e) => onChange({ x: e.target.x(), y: e.target.y() })}
         onTransformEnd={() => {
-          const node = shapeRef.current;
+          const node = groupRef.current;
           const sx = node.scaleX();
           const sy = node.scaleY();
           node.scaleX(1);
           node.scaleY(1);
           onChange({
             x: node.x(), y: node.y(), rotation: node.rotation(),
-            width: Math.max(5, node.width() * sx),
-            height: Math.max(5, node.height() * sy),
+            width: Math.max(5, layer.width * sx),
+            height: Math.max(5, layer.height * sy),
           });
         }}
-      />
+        onClick={onSelect}
+        onTap={onSelect}
+        onDblClick={onDblClick}
+        onDblTap={onDblClick}
+        onMouseEnter={() => onHover(layer.id)}
+        onMouseLeave={() => onHover(null)}
+      >
+        <KonvaImage
+          image={image as any}
+          width={layer.width}
+          height={layer.height}
+        />
+        {maskImage && (
+          <KonvaImage
+            image={maskImage as any}
+            width={layer.width}
+            height={layer.height}
+            globalCompositeOperation="destination-in"
+          />
+        )}
+      </Group>
+
       {isHovered && !isSelected && (
         <Rect
           x={layer.x} y={layer.y} width={layer.width} height={layer.height}

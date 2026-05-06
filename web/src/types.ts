@@ -13,6 +13,7 @@ export interface TemplateLayer {
   fontSize?: number;
   color?: string;
   url?: string;
+  maskUrl?: string;
   editable: boolean;
 }
 

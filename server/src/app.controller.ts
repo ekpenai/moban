@@ -294,7 +294,7 @@ export class AppController {
         y: replaceLayer.y,
         width: replaceLayer.width,
         height: replaceLayer.height,
-        url: this.normalizeUploadUrl(replaceLayer.url, req),
+        url: this.normalizeUploadUrl(replaceLayer.maskUrl || replaceLayer.url, req),
         type: replaceLayer.type,
       }
     };

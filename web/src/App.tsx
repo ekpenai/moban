@@ -101,7 +101,7 @@ function App() {
         y: replaceLayer.y,
         width: replaceLayer.width,
         height: replaceLayer.height,
-        url: replaceLayer.url,
+        url: replaceLayer.maskUrl || replaceLayer.url,
         type: replaceLayer.type
       });
       toast.success('获取蒙版信息成功', { id: tid });
@@ -281,13 +281,23 @@ function App() {
   };
 
   const handleCropConfirm = async (blob: Blob) => {
-    if (!requestCropInfo) return;
+    if (!requestCropInfo || !template) return;
     const tid = toast.loading('正在同步裁剪后的资源...');
     try {
       const formData = new FormData();
       formData.append('file', blob, 'cropped.jpg');
       const { data } = await api.post('/upload/image', formData);
-      updateLayer(requestCropInfo.id, { url: data.url });
+      
+      const layer = template.layers.find(l => l.id === requestCropInfo.id);
+      if (layer) {
+        // First time replacing: keep original url as maskUrl so shape is preserved
+        const maskUrl = layer.maskUrl || layer.url;
+        updateLayer(requestCropInfo.id, { 
+          url: data.url,
+          maskUrl: maskUrl
+        });
+      }
+      
       toast.success('替换成功', { id: tid });
       setRequestCropInfo(null);
     } catch (error) {
