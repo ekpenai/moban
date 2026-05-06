@@ -269,6 +269,37 @@ export class AppController {
     return { data: list.map((item) => this.normalizeTemplateData(item, req)) };
   }
 
+  @Get('templates/:id/replace-layer')
+  async getTemplateReplaceLayer(@Param('id') id: string, @Req() req: Request) {
+    const template = await this.templateRepo.findOne({ where: { id } });
+    if (!template) {
+      return { data: null, message: 'Template not found' };
+    }
+    const layers = Array.isArray(template.layers) ? template.layers : [];
+    // 查找名为“替换”的图层，如果没有则查找包含“替换”的图层，优先全匹配
+    let replaceLayer = layers.find((l: any) => l.name === '替换');
+    if (!replaceLayer) {
+      replaceLayer = layers.find((l: any) => l.name && l.name.includes('替换'));
+    }
+    
+    if (!replaceLayer) {
+      return { data: null, message: '未找到名称为“替换”的图层' };
+    }
+    
+    return {
+      data: {
+        id: replaceLayer.id,
+        name: replaceLayer.name,
+        x: replaceLayer.x,
+        y: replaceLayer.y,
+        width: replaceLayer.width,
+        height: replaceLayer.height,
+        url: this.normalizeUploadUrl(replaceLayer.url, req),
+        type: replaceLayer.type,
+      }
+    };
+  }
+
   @Get('templates/:id')
   async getTemplateDetail(@Param('id') id: string, @Req() req: Request) {
     const template = await this.templateRepo.findOne({ where: { id } });
