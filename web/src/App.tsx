@@ -51,6 +51,8 @@ function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState('全部');
 
+  const [maskInfo, setMaskInfo] = useState<any>(null);
+
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const templateId = params.get('templateId');
@@ -74,6 +76,38 @@ function App() {
         });
     }
   }, []);
+
+  const handleFetchMaskInfo = () => {
+    if (!template) {
+      toast.error('请先选择一个模板');
+      return;
+    }
+    
+    const tid = toast.loading('获取蒙版信息中...');
+    
+    // 直接从前端当前模板状态中查找，这样即使是刚导入还没保存的 PSD 也能正常获取
+    const layers = template.layers || [];
+    let replaceLayer = layers.find((l: any) => l.name === '替换');
+    if (!replaceLayer) {
+      replaceLayer = layers.find((l: any) => l.name && l.name.includes('替换'));
+    }
+
+    if (replaceLayer) {
+      setMaskInfo({
+        id: replaceLayer.id,
+        name: replaceLayer.name,
+        x: replaceLayer.x,
+        y: replaceLayer.y,
+        width: replaceLayer.width,
+        height: replaceLayer.height,
+        url: replaceLayer.url,
+        type: replaceLayer.type
+      });
+      toast.success('获取蒙版信息成功', { id: tid });
+    } else {
+      toast.error('未找到名称包含“替换”的图层', { id: tid });
+    }
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -498,6 +532,17 @@ function App() {
                     <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-widest font-bold">Local Asset</p>
                     <input type="file" hidden accept="image/*" onChange={handleAddImage} />
                   </label>
+
+                  <button 
+                    onClick={handleFetchMaskInfo}
+                    className="w-full p-6 bg-slate-50/50 hover:bg-white border border-transparent hover:border-emerald-100 rounded-[28px] transition-all hover:shadow-xl hover:shadow-emerald-50 active:scale-95 group text-center"
+                  >
+                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 transition-colors group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-lg group-hover:shadow-emerald-100">
+                      <Layout size={20} />
+                    </div>
+                    <p className="text-xs font-bold text-slate-800">获取替换蒙版信息</p>
+                    <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-widest font-bold">Mask API Test</p>
+                  </button>
                 </div>
               )}
 
@@ -597,6 +642,64 @@ function App() {
                 <img src={renderResult} className="max-h-[50vh] object-contain shadow-[0_32px_64px_rgba(0,0,0,0.12)] rounded-2xl border-[12px] border-white" />
               </div>
            </div>
+        </div>
+      )}
+
+      {/* 蒙版信息展示弹窗 */}
+      {maskInfo && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-[24px] w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-6 pb-2">
+              <h3 className="text-lg font-black text-slate-800">替换图层蒙版信息</h3>
+              <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">API Response Data</p>
+            </div>
+            
+            <div className="p-6 bg-slate-50 border-y border-slate-100 flex-1 overflow-y-auto">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Width</span>
+                    <p className="text-sm font-black text-slate-700 mt-0.5">{Math.round(maskInfo.width)} px</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Height</span>
+                    <p className="text-sm font-black text-slate-700 mt-0.5">{Math.round(maskInfo.height)} px</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">X Position</span>
+                    <p className="text-sm font-black text-slate-700 mt-0.5">{Math.round(maskInfo.x)} px</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Y Position</span>
+                    <p className="text-sm font-black text-slate-700 mt-0.5">{Math.round(maskInfo.y)} px</p>
+                  </div>
+                </div>
+                
+                {maskInfo.url && (
+                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Preview</span>
+                    <img src={maskInfo.url} className="w-full h-auto max-h-32 object-contain rounded-lg bg-slate-100" alt="mask preview" />
+                  </div>
+                )}
+                
+                <div className="bg-slate-800 p-3 rounded-xl shadow-sm">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Raw JSON</span>
+                  <pre className="text-[10px] text-emerald-400 font-mono whitespace-pre-wrap break-all">
+                    {JSON.stringify(maskInfo, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 flex justify-end gap-2">
+              <button 
+                onClick={() => setMaskInfo(null)}
+                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
