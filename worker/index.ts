@@ -122,13 +122,69 @@ async function renderImage(template: any): Promise<string> {
         if (input) {
           const rw = Math.max(1, Math.round(layer.width));
           const rh = Math.max(1, Math.round(layer.height));
-          const processedInput = await sharp(input)
+          let processedInput = await sharp(input)
             .resize({
               width: rw,
               height: rh,
               fit: 'fill',
             })
             .toBuffer();
+
+          // 应用图层蒙版处理 (Layer Mask)
+          if (layer.maskUrl) {
+            let maskInput: Buffer | null = null;
+            try {
+              if (layer.maskUrl.startsWith('data:image')) {
+                const base64Data = layer.maskUrl.replace(/^data:image\/\w+;base64,/, '');
+                maskInput = Buffer.from(base64Data, 'base64');
+              } else if (layer.maskUrl.startsWith('http')) {
+                const maskRes = await axios.get(normalizeAssetUrl(layer.maskUrl), {
+                  responseType: 'arraybuffer',
+                  timeout: 30000,
+                });
+                maskInput = Buffer.from(maskRes.data);
+              }
+            } catch (e) {
+              logger.error(`Failed to fetch maskUrl for layer ${layer.id}:`, (e as Error).message);
+            }
+
+            if (maskInput) {
+              const maskRectW = layer.maskRect ? Math.max(1, Math.round(layer.maskRect.width)) : rw;
+              const maskRectH = layer.maskRect ? Math.max(1, Math.round(layer.maskRect.height)) : rh;
+              const maskOffsetX = layer.maskRect ? Math.round(layer.maskRect.x - layer.x) : 0;
+              const maskOffsetY = layer.maskRect ? Math.round(layer.maskRect.y - layer.y) : 0;
+
+              // 1. 将蒙版调整为 maskRect 大小并提取亮度作为透明度（灰度图，单通道）
+              const resizedMask = await sharp(maskInput)
+                .resize({ width: maskRectW, height: maskRectH, fit: 'fill' })
+                .extractChannel('red') // 提取 R 通道作为灰度值
+                .raw()
+                .toBuffer();
+
+              // 2. 创建一个等同于当前图层宽高的全透明单通道底图
+              const fullMaskAlpha = await sharp({
+                create: { width: rw, height: rh, channels: 1, background: { r: 0 } } // 0 = 完全透明
+              })
+                // 将缩放后的蒙版粘贴到相对偏移位置上
+                .composite([
+                  {
+                    input: resizedMask,
+                    raw: { width: maskRectW, height: maskRectH, channels: 1 },
+                    left: maskOffsetX,
+                    top: maskOffsetY
+                  }
+                ])
+                .raw()
+                .toBuffer();
+
+              // 3. 将最终的 alpha 蒙版应用到我们的图层图片上
+              processedInput = await sharp(processedInput)
+                .removeAlpha() // 去除原图可能存在的透明通道，避免冲突
+                .joinChannel(fullMaskAlpha, { raw: { width: rw, height: rh, channels: 1 } })
+                .png()
+                .toBuffer();
+            }
+          }
 
           const clipped = await clipRasterToCanvas(
             processedInput,

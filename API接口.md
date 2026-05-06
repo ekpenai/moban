@@ -79,6 +79,13 @@
         "width": 675,
         "height": 1200,
         "url": "https://.../uploads/xxx.png",
+        "maskUrl": "https://.../uploads/mask-xxx.png", // [可选] 如果该图层在 PSD 中包含图层蒙版
+        "maskRect": { // [可选] 蒙版的真实尺寸和坐标
+          "x": 0,
+          "y": 0,
+          "width": 675,
+          "height": 1200
+        },
         "editable": true
       },
       {
