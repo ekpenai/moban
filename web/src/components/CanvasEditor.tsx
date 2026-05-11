@@ -1,10 +1,9 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Group, Image as KonvaImage, Text, Transformer, Rect } from 'react-konva';
 import { useEditorStore } from '../store/useEditorStore';
 import type { TemplateLayer } from '../types';
 import toast from 'react-hot-toast';
 import api from '../lib/axios';
-import { Undo2, Redo2, Sparkles, Minus, Plus, RefreshCw } from 'lucide-react';
 
 /**
  * MacOS Elite 级设计系统
