@@ -279,6 +279,32 @@ let AppController = class AppController {
         });
         return { data: list.map((item) => this.normalizeTemplateData(item, req)) };
     }
+    async getTemplateReplaceLayer(id, req) {
+        const template = await this.templateRepo.findOne({ where: { id } });
+        if (!template) {
+            return { data: null, message: 'Template not found' };
+        }
+        const layers = Array.isArray(template.layers) ? template.layers : [];
+        let replaceLayer = layers.find((l) => l.name === '替换');
+        if (!replaceLayer) {
+            replaceLayer = layers.find((l) => l.name && l.name.includes('替换'));
+        }
+        if (!replaceLayer) {
+            return { data: null, message: '未找到名称为“替换”的图层' };
+        }
+        return {
+            data: {
+                id: replaceLayer.id,
+                name: replaceLayer.name,
+                x: replaceLayer.maskRect ? replaceLayer.maskRect.x : replaceLayer.x,
+                y: replaceLayer.maskRect ? replaceLayer.maskRect.y : replaceLayer.y,
+                width: replaceLayer.maskRect ? replaceLayer.maskRect.width : replaceLayer.width,
+                height: replaceLayer.maskRect ? replaceLayer.maskRect.height : replaceLayer.height,
+                url: this.normalizeUploadUrl(replaceLayer.maskUrl || replaceLayer.url, req),
+                type: replaceLayer.type,
+            }
+        };
+    }
     async getTemplateDetail(id, req) {
         const template = await this.templateRepo.findOne({ where: { id } });
         return { data: template ? this.normalizeTemplateData(template, req) : null };
@@ -432,6 +458,14 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "listTemplates", null);
+__decorate([
+    (0, common_1.Get)('templates/:id/replace-layer'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getTemplateReplaceLayer", null);
 __decorate([
     (0, common_1.Get)('templates/:id'),
     __param(0, (0, common_1.Param)('id')),

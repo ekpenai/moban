@@ -49,6 +49,22 @@ export declare class AppController {
     listTemplates(req: Request): Promise<{
         data: any[];
     }>;
+    getTemplateReplaceLayer(id: string, req: Request): Promise<{
+        data: null;
+        message: string;
+    } | {
+        data: {
+            id: any;
+            name: any;
+            x: any;
+            y: any;
+            width: any;
+            height: any;
+            url: string | undefined;
+            type: any;
+        };
+        message?: undefined;
+    }>;
     getTemplateDetail(id: string, req: Request): Promise<{
         data: any;
     }>;

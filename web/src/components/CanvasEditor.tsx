@@ -42,13 +42,39 @@ const useContainerSize = (ref: React.RefObject<HTMLDivElement>) => {
   return size;
 };
 
+const getLayerMaskUrl = (layer: TemplateLayer): string | undefined => {
+  const mask = layer.mask;
+  if (typeof mask === 'string') return mask;
+  return (
+    layer.maskUrl ||
+    layer.mask_url ||
+    layer.maskSrc ||
+    layer.maskPath ||
+    mask?.url ||
+    mask?.src ||
+    mask?.path ||
+    mask?.image ||
+    layer.maskInfo?.url ||
+    layer.clippingMask?.url ||
+    layer.clipMask?.url
+  );
+};
+
+const isLayerReplaceable = (layer: TemplateLayer): boolean => {
+  if (typeof layer.isReplaceable === 'boolean') return layer.isReplaceable;
+  const text = `${layer.name || ''} ${layer.title || ''} ${layer.label || ''}`;
+  return text.includes('替换');
+};
+
 const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, onDblClick }: any) => {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [maskImage, setMaskImage] = useState<HTMLImageElement | null>(null);
   const groupRef = useRef<any>(null);
   const trRef = useRef<any>(null);
+  const maskUrl = getLayerMaskUrl(layer);
 
   useEffect(() => {
+    setImage(null);
     if (layer.url) {
       const img = new window.Image();
       img.crossOrigin = 'Anonymous';
@@ -58,12 +84,13 @@ const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, o
   }, [layer.url]);
 
   useEffect(() => {
-    if (layer.maskUrl) {
+    if (maskUrl) {
       const img = new window.Image();
       img.crossOrigin = 'Anonymous';
-      img.src = layer.maskUrl;
+      img.src = maskUrl;
       img.onload = () => {
-        // Convert grayscale mask (white=visible, black=hidden) to alpha mask
+        // Convert grayscale mask (white=visible, black=hidden) to alpha mask.
+        // Transparent PNG masks keep their own alpha, which is what WeChat mini-program templates usually need.
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
@@ -73,10 +100,8 @@ const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, o
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const data = imageData.data;
           for (let i = 0; i < data.length; i += 4) {
-            // R channel holds the brightness in grayscale
-            const brightness = data[i]; 
-            // Set Alpha to brightness (black -> transparent, white -> opaque)
-            data[i + 3] = brightness;
+            const brightness = Math.max(data[i], data[i + 1], data[i + 2]);
+            data[i + 3] = Math.round((data[i + 3] * brightness) / 255);
           }
           ctx.putImageData(imageData, 0, 0);
           
@@ -87,10 +112,11 @@ const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, o
           setMaskImage(img);
         }
       };
+      img.onerror = () => setMaskImage(null);
     } else {
       setMaskImage(null);
     }
-  }, [layer.maskUrl]);
+  }, [maskUrl]);
 
   useEffect(() => {
     const node = groupRef.current;
@@ -274,13 +300,17 @@ export const CanvasEditor: React.FC = () => {
     const layer = template?.layers.find(l => l.id === replacingId);
     if (!layer) return;
 
+    const maskRect = layer.maskRect;
+    const cropWidth = maskRect?.width || layer.width;
+    const cropHeight = maskRect?.height || layer.height;
+
     const reader = new FileReader();
     reader.onload = () => {
       const url = reader.result as string;
       setRequestCropInfo({
         id: replacingId,
         url,
-        aspect: layer.width / layer.height
+        aspect: cropWidth / cropHeight
       });
       setReplacingId(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -289,6 +319,11 @@ export const CanvasEditor: React.FC = () => {
   };
 
   const onImageDblClick = (id: string) => {
+    const layer = template?.layers.find(l => l.id === id);
+    if (layer && !isLayerReplaceable(layer)) {
+      toast.error('该图片图层未标记为可替换');
+      return;
+    }
     setReplacingId(id);
     fileInputRef.current?.click();
   };

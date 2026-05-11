@@ -77,6 +77,30 @@ function App() {
     }
   }, []);
 
+  const getLayerMaskUrl = (layer: any): string | undefined => {
+    const mask = layer.mask;
+    if (typeof mask === 'string') return mask;
+    return (
+      layer.maskUrl ||
+      layer.mask_url ||
+      layer.maskSrc ||
+      layer.maskPath ||
+      mask?.url ||
+      mask?.src ||
+      mask?.path ||
+      mask?.image ||
+      layer.maskInfo?.url ||
+      layer.clippingMask?.url ||
+      layer.clipMask?.url
+    );
+  };
+
+  const isLayerReplaceable = (layer: any): boolean => {
+    if (typeof layer.isReplaceable === 'boolean') return layer.isReplaceable;
+    const text = `${layer.name || ''} ${layer.title || ''} ${layer.label || ''}`;
+    return text.includes('替换');
+  };
+
   const handleFetchMaskInfo = () => {
     if (!template) {
       toast.error('请先选择一个模板');
@@ -87,26 +111,28 @@ function App() {
     
     // 直接从前端当前模板状态中查找，这样即使是刚导入还没保存的 PSD 也能正常获取
     const layers = template.layers || [];
-    let replaceLayer = layers.find((l: any) => l.name === '替换');
+    let replaceLayer = layers.find((l: any) => l.type === 'image' && isLayerReplaceable(l));
     if (!replaceLayer) {
-      replaceLayer = layers.find((l: any) => l.name && l.name.includes('替换'));
+      replaceLayer = layers.find((l: any) => l.type === 'image' && getLayerMaskUrl(l));
     }
 
     if (replaceLayer) {
+      const maskUrl = getLayerMaskUrl(replaceLayer);
       setSelectedId(replaceLayer.id);
       setMaskInfo({
         id: replaceLayer.id,
-        name: replaceLayer.name,
+        name: replaceLayer.name || replaceLayer.title || replaceLayer.label,
         x: replaceLayer.maskRect ? replaceLayer.maskRect.x : replaceLayer.x,
         y: replaceLayer.maskRect ? replaceLayer.maskRect.y : replaceLayer.y,
         width: replaceLayer.maskRect ? replaceLayer.maskRect.width : replaceLayer.width,
         height: replaceLayer.maskRect ? replaceLayer.maskRect.height : replaceLayer.height,
-        url: replaceLayer.maskUrl || replaceLayer.url,
-        type: replaceLayer.type
+        url: maskUrl || replaceLayer.url,
+        type: replaceLayer.type,
+        isReplaceable: isLayerReplaceable(replaceLayer),
       });
-      toast.success('获取蒙版信息成功', { id: tid });
+      toast.success(maskUrl ? '获取蒙版信息成功' : '已找到替换图层，但未检测到蒙版地址', { id: tid });
     } else {
-      toast.error('未找到名称包含“替换”的图层', { id: tid });
+      toast.error('未找到可替换图片图层或蒙版图层', { id: tid });
     }
   };
 
@@ -290,11 +316,10 @@ function App() {
       
       const layer = template.layers.find(l => l.id === requestCropInfo.id);
       if (layer) {
-        // First time replacing: keep original url as maskUrl so shape is preserved
-        const maskUrl = layer.maskUrl || layer.url;
+        const maskUrl = getLayerMaskUrl(layer);
         updateLayer(requestCropInfo.id, { 
           url: data.url,
-          maskUrl: maskUrl
+          ...(maskUrl ? { maskUrl } : {})
         });
       }
       
@@ -315,7 +340,7 @@ function App() {
       const { data } = await api.post('/upload/image', fd);
       addLayer({
         type: 'image', url: data.url, x: 100, y: 100, width: 240, height: 240,
-        editable: true, visible: true, rotation: 0
+        editable: true, visible: true, rotation: 0, scaleX: 1, scaleY: 1, isReplaceable: true, name: '替换图片'
       });
       toast.success('图片已就位', { id: tid });
     } catch { toast.error('上传失败', { id: tid }); }
@@ -693,6 +718,10 @@ function App() {
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y 坐标</span>
                 <p className="text-sm font-black text-slate-700">{Math.round(maskInfo.y)} <span className="text-[10px] text-slate-400">px</span></p>
               </div>
+            </div>
+
+            <div className={`p-2.5 rounded-2xl border text-[10px] font-bold ${maskInfo.isReplaceable ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-amber-50 border-amber-100 text-amber-700'}`}>
+              {maskInfo.isReplaceable ? '已识别为可替换图层' : '未标记 isReplaceable，建议后端补充该字段'}
             </div>
             
             {maskInfo.url && (

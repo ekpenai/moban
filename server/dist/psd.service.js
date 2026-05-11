@@ -113,6 +113,17 @@ let PsdService = PsdService_1 = class PsdService {
                 else if (layer.canvas) {
                     url = layer.canvas.toDataURL('image/png');
                 }
+                let maskUrl = undefined;
+                let maskRect = undefined;
+                if (layer.mask && layer.mask.canvas) {
+                    maskUrl = layer.mask.canvas.toDataURL('image/png');
+                    maskRect = {
+                        x: layer.mask.left || 0,
+                        y: layer.mask.top || 0,
+                        width: (layer.mask.right !== undefined && layer.mask.left !== undefined) ? (layer.mask.right - layer.mask.left) : layer.mask.canvas.width,
+                        height: (layer.mask.bottom !== undefined && layer.mask.top !== undefined) ? (layer.mask.bottom - layer.mask.top) : layer.mask.canvas.height,
+                    };
+                }
                 template.layers.push({
                     id: (0, uuid_1.v4)(),
                     name: layer.name,
@@ -131,6 +142,8 @@ let PsdService = PsdService_1 = class PsdService {
                     textAlign,
                     direction,
                     url,
+                    maskUrl,
+                    maskRect,
                     editable: true,
                 });
             }
