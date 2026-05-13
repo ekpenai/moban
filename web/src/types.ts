@@ -38,6 +38,7 @@ export interface TemplateLayer {
   };
   isReplaceable?: boolean;
   editable: boolean;
+  visible?: boolean;
 }
 
 export interface TemplateData {
