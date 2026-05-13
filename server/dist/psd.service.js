@@ -47,6 +47,29 @@ const ag_psd_1 = require("ag-psd");
 const canvas_1 = require("canvas");
 const uuid_1 = require("uuid");
 (0, ag_psd_1.initializeCanvas)(canvas_1.createCanvas);
+function isReplaceLayerName(name) {
+    return !!name && name.includes('替换');
+}
+function buildBlackWhiteMask(layerMaskCanvas) {
+    const width = layerMaskCanvas.width;
+    const height = layerMaskCanvas.height;
+    const output = (0, canvas_1.createCanvas)(width, height);
+    const ctx = output.getContext('2d');
+    const sourceCtx = layerMaskCanvas.getContext('2d');
+    const imageData = sourceCtx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3] || 0;
+        const visible = alpha > 0;
+        const value = visible ? 255 : 0;
+        data[i] = value;
+        data[i + 1] = value;
+        data[i + 2] = value;
+        data[i + 3] = 255;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return output.toDataURL('image/png');
+}
 let PsdService = PsdService_1 = class PsdService {
     logger = new common_1.Logger(PsdService_1.name);
     async parsePsd(filePath) {
@@ -116,14 +139,17 @@ let PsdService = PsdService_1 = class PsdService {
                 let maskUrl = undefined;
                 let maskRect = undefined;
                 if (layer.mask && layer.mask.canvas) {
-                    maskUrl = layer.mask.canvas.toDataURL('image/png');
                     maskRect = {
                         x: layer.mask.left || 0,
                         y: layer.mask.top || 0,
                         width: (layer.mask.right !== undefined && layer.mask.left !== undefined) ? (layer.mask.right - layer.mask.left) : layer.mask.canvas.width,
                         height: (layer.mask.bottom !== undefined && layer.mask.top !== undefined) ? (layer.mask.bottom - layer.mask.top) : layer.mask.canvas.height,
                     };
+                    maskUrl = isReplaceLayerName(layer.name)
+                        ? buildBlackWhiteMask(layer.mask.canvas)
+                        : layer.mask.canvas.toDataURL('image/png');
                 }
+                const isReplaceable = isReplaceLayerName(layer.name);
                 template.layers.push({
                     id: (0, uuid_1.v4)(),
                     name: layer.name,
@@ -144,6 +170,7 @@ let PsdService = PsdService_1 = class PsdService {
                     url,
                     maskUrl,
                     maskRect,
+                    isReplaceable,
                     editable: true,
                 });
             }

@@ -16,8 +16,8 @@ export interface TemplateLayer {
   width: number;
   height: number;
   rotation: number;
-  scaleX: number;
-  scaleY: number;
+  scaleX?: number;
+  scaleY?: number;
   text?: string;
   fontSize?: number;
   color?: string;

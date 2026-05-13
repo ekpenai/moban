@@ -1,3 +1,5 @@
+import React from 'react';
+
 const PORTRAIT_URL =
   'https://images.unsplash.com/photo-1607746882042-944635dfe10e?auto=format&fit=crop&w=800&q=80';
 

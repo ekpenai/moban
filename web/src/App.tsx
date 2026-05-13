@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { CanvasEditor } from './components/CanvasEditor';
 import { useEditorStore } from './store/useEditorStore';
 import { 

@@ -1,11 +1,14 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Group, Image as KonvaImage, Text, Transformer, Rect } from 'react-konva';
 import { useEditorStore } from '../store/useEditorStore';
 import type { TemplateLayer } from '../types';
 import toast from 'react-hot-toast';
 import api from '../lib/axios';
-import { Undo2, Redo2, RefreshCw, Sparkles, Minus, Plus } from 'lucide-react';
+import { Undo2, Redo2, Sparkles, Minus, Plus, RefreshCw } from 'lucide-react';
 
+/**
+ * MacOS Elite 级设计系统
+ */
 const MACOS_THEME = {
   primary: '#6366F1',
   bg: 'rgba(255, 255, 255, 0.75)',
@@ -63,7 +66,7 @@ const isLayerReplaceable = (layer: TemplateLayer): boolean => {
   return text.includes('替换');
 };
 
-const URLImage = ({ layer, isSelected, onSelect, onHover, onChange, onDblClick }: any) => {
+const URLImage = ({ layer, isSelected, isHovered, onSelect, onHover, onChange, onDblClick }: any) => {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [maskImage, setMaskImage] = useState<HTMLImageElement | null>(null);
   const groupRef = useRef<any>(null);
@@ -409,7 +412,7 @@ export const CanvasEditor: React.FC = () => {
             x={0} y={0} width={template.width} height={template.height}
             fill="#ffffff" shadowBlur={60} shadowColor="rgba(0,0,0,0.08)" shadowOffsetY={10} cornerRadius={2}
           />
-          <Group>
+          <Group clipX={0} clipY={0} clipWidth={template.width} clipHeight={template.height}>
             {template.layers.map((layer: TemplateLayer) => {
               const props = {
                 layer, isSelected: layer.id === selectedId, isHovered: layer.id === hoverId,
@@ -423,6 +426,50 @@ export const CanvasEditor: React.FC = () => {
         </Layer>
       </Stage>
 
+      {/* MacOS Capsule Control Console */}
+      <div className="absolute bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 md:p-1.5 bg-white/85 backdrop-blur-2xl rounded-full border border-white/40 shadow-[0_12px_44px_-8px_rgba(0,0,0,0.12)] z-50 animate-in slide-in-from-bottom-10 duration-1000 scale-[0.86] sm:scale-100 origin-bottom">
+        
+        {/* History Group */}
+        <div className="flex gap-0.5 px-0.5">
+          <button 
+            onClick={undo} disabled={past.length === 0}
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${past.length === 0 ? 'text-slate-200 opacity-40' : 'text-slate-600 hover:bg-slate-100 active:scale-90 hover:shadow-sm'}`}
+            title="Undo"
+          >
+            <Undo2 size={16} />
+          </button>
+          <button 
+            onClick={redo} disabled={future.length === 0}
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${future.length === 0 ? 'text-slate-200 opacity-40' : 'text-slate-600 hover:bg-slate-100 active:scale-90 hover:shadow-sm'}`}
+            title="Redo"
+          >
+            <Redo2 size={16} />
+          </button>
+        </div>
+
+        <div className="w-[1px] h-4 bg-slate-200 mx-1" />
+
+        {/* Zoom Group */}
+        <div className="flex items-center gap-0.5">
+          <button onClick={() => setZoom(p => Math.max(p - 0.1, 0.2))} className="w-9 h-9 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 active:scale-90"><Minus size={16} /></button>
+          <div className="min-w-[42px] sm:min-w-[50px] text-center text-[10px] font-black text-slate-400 tracking-tighter tabular-nums px-1">
+            {Math.round(finalScale * 100)}%
+          </div>
+          <button onClick={() => setZoom(p => Math.min(p + 0.1, 6))} className="w-9 h-9 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 active:scale-90"><Plus size={16} /></button>
+        </div>
+
+        <div className="w-[1px] h-4 bg-slate-200 mx-1" />
+
+        {/* Reset Capsule */}
+        <button 
+          onClick={() => {setZoom(1); setStagePos({x: 0, y: 0});}}
+          className="h-9 px-2.5 sm:px-4 flex items-center gap-1.5 sm:gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:bg-indigo-600 hover:text-white rounded-full transition-all active:scale-95 hover:shadow-lg hover:shadow-indigo-100"
+        >
+          <RefreshCw size={12} />
+          <span className="hidden sm:inline">Centering</span>
+          <span className="sm:hidden">Center</span>
+        </button>
+      </div>
 
       {!isSpacePressed && (
         <div className="hidden md:flex absolute bottom-8 right-10 text-[8px] font-black text-slate-400 uppercase tracking-[3px] pointer-events-none drop-shadow-sm opacity-50 items-center gap-3 animate-pulse">
