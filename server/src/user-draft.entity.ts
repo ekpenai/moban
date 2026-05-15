@@ -5,8 +5,8 @@ export class UserDraft {
   @PrimaryColumn({ type: 'varchar', length: 128 })
   id: string;
 
+  @PrimaryColumn({ name: 'user_id', type: 'bigint', unsigned: true })
   @Index('idx_user_updated')
-  @Column({ name: 'user_id', type: 'bigint', unsigned: true })
   userId: string;
 
   @Column({ name: 'template_id', type: 'varchar', length: 128, default: '' })

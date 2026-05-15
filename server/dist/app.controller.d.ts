@@ -95,8 +95,7 @@ export declare class AppController {
     }>;
     listFavorites(user: AuthenticatedRequestUser): Promise<{
         success: boolean;
-        items: {
-            id: number;
+        data: {
             templateId: string;
             title: string;
             image: string;
@@ -105,25 +104,23 @@ export declare class AppController {
     }>;
     saveFavorite(user: AuthenticatedRequestUser, body: SaveFavoriteDto): Promise<{
         success: boolean;
-        item: {
-            id: number;
-            templateId: string;
-            title: string;
-            image: string;
-            createdAt: Date;
-        };
+        message: string;
+    } | {
+        success: boolean;
+        message?: undefined;
     }>;
     deleteFavorite(user: AuthenticatedRequestUser, templateId: string): Promise<{
         success: boolean;
     }>;
     listDrafts(user: AuthenticatedRequestUser): Promise<{
         success: boolean;
-        items: {
+        data: {
             id: string;
             templateId: string;
             coverImage: string;
             templateWidth: number;
             templateHeight: number;
+            elementsJson: string;
             elements: any;
             createdAt: Date;
             updatedAt: Date;
@@ -131,16 +128,10 @@ export declare class AppController {
     }>;
     saveDraft(user: AuthenticatedRequestUser, body: SaveDraftDto): Promise<{
         success: boolean;
-        item: {
-            id: string;
-            templateId: string;
-            coverImage: string;
-            templateWidth: number;
-            templateHeight: number;
-            elements: any;
-            createdAt: Date;
-            updatedAt: Date;
-        };
+        message: string;
+    } | {
+        success: boolean;
+        message?: undefined;
     }>;
     deleteDraft(user: AuthenticatedRequestUser, id: string): Promise<{
         success: boolean;

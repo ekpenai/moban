@@ -8,8 +8,7 @@ export declare class UserDataService {
     constructor(favoriteRepo: Repository<UserFavorite>, draftRepo: Repository<UserDraft>);
     listFavorites(userId: string): Promise<{
         success: boolean;
-        items: {
-            id: number;
+        data: {
             templateId: string;
             title: string;
             image: string;
@@ -18,25 +17,23 @@ export declare class UserDataService {
     }>;
     saveFavorite(userId: string, body: SaveFavoriteDto): Promise<{
         success: boolean;
-        item: {
-            id: number;
-            templateId: string;
-            title: string;
-            image: string;
-            createdAt: Date;
-        };
+        message: string;
+    } | {
+        success: boolean;
+        message?: undefined;
     }>;
     deleteFavorite(userId: string, templateId: string): Promise<{
         success: boolean;
     }>;
     listDrafts(userId: string): Promise<{
         success: boolean;
-        items: {
+        data: {
             id: string;
             templateId: string;
             coverImage: string;
             templateWidth: number;
             templateHeight: number;
+            elementsJson: string;
             elements: any;
             createdAt: Date;
             updatedAt: Date;
@@ -44,20 +41,13 @@ export declare class UserDataService {
     }>;
     saveDraft(userId: string, body: SaveDraftDto): Promise<{
         success: boolean;
-        item: {
-            id: string;
-            templateId: string;
-            coverImage: string;
-            templateWidth: number;
-            templateHeight: number;
-            elements: any;
-            createdAt: Date;
-            updatedAt: Date;
-        };
+        message: string;
+    } | {
+        success: boolean;
+        message?: undefined;
     }>;
     deleteDraft(userId: string, id: string): Promise<{
         success: boolean;
     }>;
     private parseElements;
-    private toNumber;
 }

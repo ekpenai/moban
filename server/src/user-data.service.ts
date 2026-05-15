@@ -20,8 +20,7 @@ export class UserDataService {
 
     return {
       success: true,
-      items: list.map((item) => ({
-        id: this.toNumber(item.id),
+      data: list.map((item) => ({
         templateId: item.templateId,
         title: item.title,
         image: item.image,
@@ -31,14 +30,19 @@ export class UserDataService {
   }
 
   async saveFavorite(userId: string, body: SaveFavoriteDto) {
+    const finalTemplateId = String(body.templateId || body.id || '').trim();
+    if (!finalTemplateId) {
+      return { success: false, message: '缺少 templateId' };
+    }
+
     let favorite = await this.favoriteRepo.findOne({
-      where: { userId, templateId: body.templateId },
+      where: { userId, templateId: finalTemplateId },
     });
 
     if (!favorite) {
       favorite = this.favoriteRepo.create({
         userId,
-        templateId: body.templateId,
+        templateId: finalTemplateId,
         title: body.title?.trim() || '',
         image: body.image?.trim() || '',
       });
@@ -47,17 +51,8 @@ export class UserDataService {
       favorite.image = body.image?.trim() || '';
     }
 
-    const saved = await this.favoriteRepo.save(favorite);
-    return {
-      success: true,
-      item: {
-        id: this.toNumber(saved.id),
-        templateId: saved.templateId,
-        title: saved.title,
-        image: saved.image,
-        createdAt: saved.createdAt,
-      },
-    };
+    await this.favoriteRepo.save(favorite);
+    return { success: true };
   }
 
   async deleteFavorite(userId: string, templateId: string) {
@@ -73,12 +68,13 @@ export class UserDataService {
 
     return {
       success: true,
-      items: list.map((item) => ({
+      data: list.map((item) => ({
         id: item.id,
         templateId: item.templateId,
         coverImage: item.coverImage,
         templateWidth: item.templateWidth,
         templateHeight: item.templateHeight,
+        elementsJson: item.elementsJson,
         elements: this.parseElements(item.elementsJson),
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
@@ -87,13 +83,18 @@ export class UserDataService {
   }
 
   async saveDraft(userId: string, body: SaveDraftDto) {
+    const draftId = String(body.id || '').trim();
+    if (!draftId) {
+      return { success: false, message: '缺少草稿 id' };
+    }
+
     let draft = await this.draftRepo.findOne({
-      where: { id: body.id, userId },
+      where: { id: draftId, userId },
     });
 
     if (!draft) {
       draft = this.draftRepo.create({
-        id: body.id,
+        id: draftId,
         userId,
       });
     }
@@ -104,20 +105,8 @@ export class UserDataService {
     draft.templateHeight = Number.isFinite(body.templateHeight) ? Number(body.templateHeight) : 1200;
     draft.elementsJson = JSON.stringify(body.elements ?? []);
 
-    const saved = await this.draftRepo.save(draft);
-    return {
-      success: true,
-      item: {
-        id: saved.id,
-        templateId: saved.templateId,
-        coverImage: saved.coverImage,
-        templateWidth: saved.templateWidth,
-        templateHeight: saved.templateHeight,
-        elements: this.parseElements(saved.elementsJson),
-        createdAt: saved.createdAt,
-        updatedAt: saved.updatedAt,
-      },
-    };
+    await this.draftRepo.save(draft);
+    return { success: true };
   }
 
   async deleteDraft(userId: string, id: string) {
@@ -131,10 +120,5 @@ export class UserDataService {
     } catch {
       return [];
     }
-  }
-
-  private toNumber(value: string): number {
-    const numericValue = Number(value);
-    return Number.isSafeInteger(numericValue) ? numericValue : 0;
   }
 }

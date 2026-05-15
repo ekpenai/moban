@@ -1,5 +1,6 @@
 export declare class SaveFavoriteDto {
-    templateId: string;
+    templateId?: string;
+    id?: string;
     title?: string;
     image?: string;
 }

@@ -28,8 +28,8 @@ __decorate([
     __metadata("design:type", String)
 ], UserDraft.prototype, "id", void 0);
 __decorate([
+    (0, typeorm_1.PrimaryColumn)({ name: 'user_id', type: 'bigint', unsigned: true }),
     (0, typeorm_1.Index)('idx_user_updated'),
-    (0, typeorm_1.Column)({ name: 'user_id', type: 'bigint', unsigned: true }),
     __metadata("design:type", String)
 ], UserDraft.prototype, "userId", void 0);
 __decorate([

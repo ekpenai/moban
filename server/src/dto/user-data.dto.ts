@@ -3,9 +3,14 @@ import { IsArray, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateNested } 
 
 export class SaveFavoriteDto {
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MaxLength(128)
-  templateId: string;
+  templateId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  id?: string;
 
   @IsOptional()
   @IsString()
