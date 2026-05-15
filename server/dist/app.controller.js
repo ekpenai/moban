@@ -57,7 +57,9 @@ const typeorm_2 = require("typeorm");
 const template_entity_1 = require("./template.entity");
 const setting_entity_1 = require("./setting.entity");
 const template_dto_1 = require("./dto/template.dto");
+const wechat_login_dto_1 = require("./dto/wechat-login.dto");
 const logger_service_1 = require("./logger.service");
+const wechat_auth_service_1 = require("./wechat-auth.service");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 function parseSizeToBytes(input, fallbackBytes) {
@@ -82,13 +84,15 @@ let AppController = class AppController {
     templateRepo;
     settingRepo;
     logger;
-    constructor(psdService, s3Service, renderQueue, templateRepo, settingRepo, logger) {
+    wechatAuthService;
+    constructor(psdService, s3Service, renderQueue, templateRepo, settingRepo, logger, wechatAuthService) {
         this.psdService = psdService;
         this.s3Service = s3Service;
         this.renderQueue = renderQueue;
         this.templateRepo = templateRepo;
         this.settingRepo = settingRepo;
         this.logger = logger;
+        this.wechatAuthService = wechatAuthService;
     }
     getPublicBaseUrl(req) {
         const envBase = (process.env.PUBLIC_BASE_URL || '').trim();
@@ -231,6 +235,9 @@ let AppController = class AppController {
             throw new common_1.BadRequestException('No file uploaded');
         const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'sys-images');
         return { url };
+    }
+    async wechatLogin(body) {
+        return this.wechatAuthService.login(body);
     }
     async getSetting(key) {
         const setting = await this.settingRepo.findOne({ where: { key } });
@@ -429,6 +436,13 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "uploadSysImage", null);
 __decorate([
+    (0, common_1.Post)('auth/wechat-login'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [wechat_login_dto_1.WechatLoginDto]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "wechatLogin", null);
+__decorate([
     (0, common_1.Get)('settings/:key'),
     __param(0, (0, common_1.Param)('key')),
     __metadata("design:type", Function),
@@ -510,6 +524,7 @@ exports.AppController = AppController = __decorate([
     __metadata("design:paramtypes", [psd_service_1.PsdService,
         s3_service_1.S3Service, Object, typeorm_2.Repository,
         typeorm_2.Repository,
-        logger_service_1.WinstonLoggerService])
+        logger_service_1.WinstonLoggerService,
+        wechat_auth_service_1.WechatAuthService])
 ], AppController);
 //# sourceMappingURL=app.controller.js.map

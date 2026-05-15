@@ -10,7 +10,9 @@ import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
 import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
+import { WechatLoginDto } from './dto/wechat-login.dto';
 import { WinstonLoggerService } from './logger.service';
+import { WechatAuthService } from './wechat-auth.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Request } from 'express';
@@ -40,6 +42,7 @@ export class AppController {
     @InjectRepository(Template) private templateRepo: Repository<Template>,
     @InjectRepository(Setting) private settingRepo: Repository<Setting>,
     private readonly logger: WinstonLoggerService,
+    private readonly wechatAuthService: WechatAuthService,
   ) {}
 
   private getPublicBaseUrl(req?: Request): string {
@@ -210,6 +213,11 @@ export class AppController {
     if (!file) throw new BadRequestException('No file uploaded');
     const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'sys-images');
     return { url };
+  }
+
+  @Post('auth/wechat-login')
+  async wechatLogin(@Body() body: WechatLoginDto) {
+    return this.wechatAuthService.login(body);
   }
 
   @Get('settings/:key')

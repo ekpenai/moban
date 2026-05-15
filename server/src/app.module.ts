@@ -6,6 +6,8 @@ import { CleanupService } from './cleanup.service';
 import { S3Service } from './s3.service';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
+import { WxUser } from './wx-user.entity';
+import { WechatAuthService } from './wechat-auth.service';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -67,14 +69,14 @@ import { join } from 'path';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        entities: [Template, Setting],
+        entities: [Template, Setting, WxUser],
         synchronize: true,
       }),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([Template, Setting]),
+    TypeOrmModule.forFeature([Template, Setting, WxUser]),
   ],
   controllers: [AppController],
-  providers: [PsdService, WinstonLoggerService, CleanupService, S3Service],
+  providers: [PsdService, WinstonLoggerService, CleanupService, S3Service, WechatAuthService],
 })
 export class AppModule { }

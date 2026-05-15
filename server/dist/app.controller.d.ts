@@ -5,7 +5,9 @@ import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
 import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
+import { WechatLoginDto } from './dto/wechat-login.dto';
 import { WinstonLoggerService } from './logger.service';
+import { WechatAuthService } from './wechat-auth.service';
 import type { Request } from 'express';
 export declare class AppController {
     private readonly psdService;
@@ -14,7 +16,8 @@ export declare class AppController {
     private templateRepo;
     private settingRepo;
     private readonly logger;
-    constructor(psdService: PsdService, s3Service: S3Service, renderQueue: Queue, templateRepo: Repository<Template>, settingRepo: Repository<Setting>, logger: WinstonLoggerService);
+    private readonly wechatAuthService;
+    constructor(psdService: PsdService, s3Service: S3Service, renderQueue: Queue, templateRepo: Repository<Template>, settingRepo: Repository<Setting>, logger: WinstonLoggerService, wechatAuthService: WechatAuthService);
     private getPublicBaseUrl;
     private toPublicUploadUrl;
     private normalizeUploadUrl;
@@ -35,6 +38,22 @@ export declare class AppController {
     }>;
     uploadSysImage(file: Express.Multer.File, req: Request): Promise<{
         url: string;
+    }>;
+    wechatLogin(body: WechatLoginDto): Promise<{
+        success: true;
+        user: {
+            id: number;
+            nickName: string;
+            avatarUrl: string;
+            gender: number;
+            country: string;
+            province: string;
+            city: string;
+            language: string;
+            createdAt: Date;
+            updatedAt: Date;
+            lastLoginAt: Date | null;
+        };
     }>;
     getSetting(key: string): Promise<{
         data: any;
