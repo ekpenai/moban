@@ -1,303 +1,476 @@
 import Queue, { Job } from 'bull';
-import sharp from 'sharp';
 import * as path from 'path';
 import * as winston from 'winston';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import puppeteer, { Browser } from 'puppeteer';
 
-// 深度对齐后端配置
 dotenv.config({ path: path.join(__dirname, '..', 'server', '.env') });
 
 const logger = winston.createLogger({
   level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json(),
-  ),
+  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
   transports: [
     new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple(),
-      ),
+      format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
     }),
   ],
 });
 
 const connection = {
   host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  port: parseInt(process.env.REDIS_PORT || '6379', 10),
   username: process.env.REDIS_USERNAME || process.env.REDIS_USER || undefined,
   password: process.env.REDIS_PASSWORD || process.env.REDIS_PASS || undefined,
   maxRetriesPerRequest: null as null,
   enableReadyCheck: false,
 };
 
-function escapeXml(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+type PosterTextItem = {
+  text: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  fontSize?: number;
+  color?: string;
+  rotate?: number;
+  rotation?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  align?: string;
+  textAlign?: string;
+  direction?: string;
+  lineHeight?: number;
+  letterSpacing?: number;
+  scaleX?: number;
+  scaleY?: number;
+  opacity?: number;
+};
+
+type PosterImageItem = {
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotate?: number;
+  rotation?: number;
+  scaleX?: number;
+  scaleY?: number;
+  opacity?: number;
+  borderRadius?: number;
+  maskUrl?: string;
+  maskRect?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+};
+
+type RenderPayload = {
+  width: number;
+  height: number;
+  backgroundImage?: string;
+  texts?: PosterTextItem[];
+  images?: PosterImageItem[];
+};
+
+let browserPromise: Promise<Browser> | null = null;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
-/**
- * Sharp 要求：贴图左上角 + 贴图宽高不能超出底图。
- * 超出画布的区域需要先裁掉再 composite。
- */
-async function clipRasterToCanvas(
-  input: Buffer,
-  layerX: number,
-  layerY: number,
-  bufferWidth: number,
-  bufferHeight: number,
-  canvasWidth: number,
-  canvasHeight: number,
-): Promise<{ input: Buffer; left: number; top: number } | null> {
-  const lx = Math.round(layerX);
-  const ly = Math.round(layerY);
-  const lw = Math.max(1, bufferWidth);
-  const lh = Math.max(1, bufferHeight);
-
-  const interLeft = Math.max(0, lx);
-  const interTop = Math.max(0, ly);
-  const interRight = Math.min(canvasWidth, lx + lw);
-  const interBottom = Math.min(canvasHeight, ly + lh);
-
-  if (interRight <= interLeft || interBottom <= interTop) return null;
-
-  const cropX = interLeft - lx;
-  const cropY = interTop - ly;
-  const cropW = interRight - interLeft;
-  const cropH = interBottom - interTop;
-
-  if (cropW < 1 || cropH < 1) return null;
-
-  const clipped = await sharp(input)
-    .extract({
-      left: cropX,
-      top: cropY,
-      width: cropW,
-      height: cropH,
-    })
-    .toBuffer();
-
-  return { input: clipped, left: interLeft, top: interTop };
-}
-
-function getPublicBaseUrl(): string {
-  const fromEnv = (process.env.PUBLIC_BASE_URL || process.env.SERVER_BASE_URL || '').trim();
-  return fromEnv.replace(/\/+$/, '');
+function toCssColor(value: string | undefined, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
 function normalizeAssetUrl(url: string): string {
-  const base = getPublicBaseUrl();
+  const base = (process.env.PUBLIC_BASE_URL || process.env.SERVER_BASE_URL || '').trim().replace(/\/+$/, '');
   if (!base) return url;
   return url.replace(/^https?:\/\/localhost:3000(?=\/|$)/i, base);
 }
 
-// Simplified renderer using sharp composition
-async function renderImage(template: any): Promise<string> {
-  logger.info(`Starting render process for template width: ${template.width}, layers: ${template.layers.length}`);
-  const width = template.width;
-  const height = template.height;
-
-  const composites: sharp.OverlayOptions[] = [];
-
-  for (const layer of template.layers) {
-    try {
-      if (layer.type === 'image' && layer.url) {
-        let input: Buffer;
-        if (layer.url.startsWith('data:image')) {
-          const base64Data = layer.url.replace(/^data:image\/\w+;base64,/, '');
-          input = Buffer.from(base64Data, 'base64');
-        } else if (layer.url.startsWith('http')) {
-          const response = await axios.get(normalizeAssetUrl(layer.url), {
-            responseType: 'arraybuffer',
-            timeout: 60000,
-            maxContentLength: 50 * 1024 * 1024,
-          });
-          input = Buffer.from(response.data);
-          logger.info(`Successfully fetched remote asset: ${normalizeAssetUrl(layer.url)}`);
-        } else {
-          continue;
-        }
-
-        if (input) {
-          const rw = Math.max(1, Math.round(layer.width));
-          const rh = Math.max(1, Math.round(layer.height));
-          let processedInput = await sharp(input)
-            .resize({
-              width: rw,
-              height: rh,
-              fit: 'fill',
-            })
-            .toBuffer();
-
-          // 应用图层蒙版处理 (Layer Mask)
-          if (layer.maskUrl) {
-            let maskInput: Buffer | null = null;
-            try {
-              if (layer.maskUrl.startsWith('data:image')) {
-                const base64Data = layer.maskUrl.replace(/^data:image\/\w+;base64,/, '');
-                maskInput = Buffer.from(base64Data, 'base64');
-              } else if (layer.maskUrl.startsWith('http')) {
-                const maskRes = await axios.get(normalizeAssetUrl(layer.maskUrl), {
-                  responseType: 'arraybuffer',
-                  timeout: 30000,
-                });
-                maskInput = Buffer.from(maskRes.data);
-              }
-            } catch (e) {
-              logger.error(`Failed to fetch maskUrl for layer ${layer.id}:`, (e as Error).message);
-            }
-
-            if (maskInput) {
-              const maskRectW = layer.maskRect ? Math.max(1, Math.round(layer.maskRect.width)) : rw;
-              const maskRectH = layer.maskRect ? Math.max(1, Math.round(layer.maskRect.height)) : rh;
-              const maskOffsetX = layer.maskRect ? Math.round(layer.maskRect.x - layer.x) : 0;
-              const maskOffsetY = layer.maskRect ? Math.round(layer.maskRect.y - layer.y) : 0;
-
-              // 1. 将蒙版调整为 maskRect 大小并提取亮度作为透明度（灰度图，单通道）
-              const resizedMask = await sharp(maskInput)
-                .resize({ width: maskRectW, height: maskRectH, fit: 'fill' })
-                .extractChannel('red') // 提取 R 通道作为灰度值
-                .raw()
-                .toBuffer();
-
-              // 2. 创建一个等同于当前图层宽高的全透明单通道底图
-              const fullMaskAlpha = await sharp({
-                create: { width: rw, height: rh, channels: 1, background: { r: 0 } } // 0 = 完全透明
-              })
-                // 将缩放后的蒙版粘贴到相对偏移位置上
-                .composite([
-                  {
-                    input: resizedMask,
-                    raw: { width: maskRectW, height: maskRectH, channels: 1 },
-                    left: maskOffsetX,
-                    top: maskOffsetY
-                  }
-                ])
-                .raw()
-                .toBuffer();
-
-              // 3. 将最终的 alpha 蒙版应用到我们的图层图片上
-              processedInput = await sharp(processedInput)
-                .removeAlpha() // 去除原图可能存在的透明通道，避免冲突
-                .joinChannel(fullMaskAlpha, { raw: { width: rw, height: rh, channels: 1 } })
-                .png()
-                .toBuffer();
-            }
-          }
-
-          const clipped = await clipRasterToCanvas(
-            processedInput,
-            layer.x,
-            layer.y,
-            rw,
-            rh,
-            width,
-            height,
-          );
-          if (clipped) {
-            composites.push(clipped);
-          }
-        }
-      } else if (layer.type === 'text' && layer.text) {
-      // Create SVG text layer to composite into Sharp
-      const padding = 10;
-      const color = typeof layer.color === 'string' ? layer.color : '#000000';
-      const fontFamily = layer.fontFamily ? escapeXml(layer.fontFamily) + ', Arial, sans-serif' : 'Arial, sans-serif';
-      const direction = layer.direction === 'rtl' ? 'rtl' : 'ltr';
-      const align = layer.textAlign || 'left';
-      
-      const svgW = Math.max(1, Math.round(layer.width + padding));
-      const svgH = Math.max(1, Math.round(layer.height + padding));
-      
-      let textAnchor = 'start';
-      let xPos = 0;
-      
-      if (align === 'center') {
-        textAnchor = 'middle';
-        xPos = svgW / 2;
-      } else if (align === 'right' || (direction === 'rtl' && align !== 'left')) {
-        textAnchor = 'end';
-        xPos = svgW;
-      }
-
-      // 处理 autoScale 缩放逻辑
-      const autoScaleProps = layer.autoScale 
-        ? `textLength="${Math.max(1, layer.width)}" lengthAdjust="spacingAndGlyphs"`
-        : '';
-
-      const svgText = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}">
-          <text x="${xPos}" y="${Math.round(layer.fontSize)}" font-size="${layer.fontSize}" font-family="${fontFamily}" fill="${escapeXml(color)}" text-anchor="${textAnchor}" direction="${direction}" ${autoScaleProps}>
-            ${escapeXml(String(layer.text))}
-          </text>
-        </svg>
-      `;
-      const svgPng = await sharp(Buffer.from(svgText)).png().toBuffer();
-      const clippedText = await clipRasterToCanvas(
-        svgPng,
-        layer.x,
-        layer.y,
-        svgW,
-        svgH,
-        width,
-        height,
-      );
-      if (clippedText) {
-        composites.push(clippedText);
-      }
-    }
-  } catch (err) {
-    logger.error(`Failed to process layer ${layer.id}:`, (err as Error).message);
-  }
+function detectDirection(text: string | undefined, direction?: string): 'rtl' | 'ltr' {
+  if (direction === 'rtl' || direction === 'ltr') return direction;
+  if (!text) return 'ltr';
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(text) ? 'rtl' : 'ltr';
 }
 
-  // Create a blank background image
-  const baseCanvas = sharp({
-    create: {
+function normalizeRenderPayload(template: any): RenderPayload {
+  if (Array.isArray(template?.texts) || Array.isArray(template?.images) || template?.backgroundImage) {
+    return {
+      width: Number(template.width) || 1080,
+      height: Number(template.height) || 1920,
+      backgroundImage: template.backgroundImage,
+      texts: Array.isArray(template.texts) ? template.texts : [],
+      images: Array.isArray(template.images) ? template.images : [],
+    };
+  }
+
+  const layers = Array.isArray(template?.layers) ? template.layers : [];
+  const images: PosterImageItem[] = [];
+  const texts: PosterTextItem[] = [];
+
+  for (const layer of layers) {
+    if (layer?.visible === false) continue;
+
+    if (layer?.type === 'image' && layer?.url) {
+      images.push({
+        url: normalizeAssetUrl(layer.url),
+        x: Number(layer.x) || 0,
+        y: Number(layer.y) || 0,
+        width: Math.max(1, Number(layer.width) || 1),
+        height: Math.max(1, Number(layer.height) || 1),
+        rotation: Number(layer.rotation) || 0,
+        scaleX: Number(layer.scaleX) || 1,
+        scaleY: Number(layer.scaleY) || 1,
+        opacity: typeof layer.opacity === 'number' ? layer.opacity : 1,
+        maskUrl: layer.maskUrl ? normalizeAssetUrl(layer.maskUrl) : undefined,
+        maskRect: layer.maskRect,
+      });
+      continue;
+    }
+
+    if (layer?.type === 'text' && typeof layer.text === 'string') {
+      texts.push({
+        text: layer.text,
+        x: Number(layer.x) || 0,
+        y: Number(layer.y) || 0,
+        width: Number(layer.width) || undefined,
+        height: Number(layer.height) || undefined,
+        fontSize: Number(layer.fontSize) || 32,
+        color: layer.color,
+        rotation: Number(layer.rotation) || 0,
+        fontFamily: layer.fontFamily,
+        fontWeight: layer.fontWeight,
+        textAlign: layer.textAlign,
+        direction: layer.direction,
+        lineHeight: typeof layer.lineHeight === 'number' ? layer.lineHeight : 1.4,
+        letterSpacing: typeof layer.letterSpacing === 'number' ? layer.letterSpacing : 0,
+        scaleX: Number(layer.scaleX) || 1,
+        scaleY: Number(layer.scaleY) || 1,
+        opacity: typeof layer.opacity === 'number' ? layer.opacity : 1,
+      });
+    }
+  }
+
+  const backgroundImage = images.length > 0 && images[0].x === 0 && images[0].y === 0 ? images.shift()?.url : undefined;
+
+  return {
+    width: Number(template?.width) || 1080,
+    height: Number(template?.height) || 1920,
+    backgroundImage,
+    texts,
+    images,
+  };
+}
+
+function discoverFontFaces(): string {
+  const fontDirs = [
+    path.join(__dirname, 'fonts'),
+    path.join(__dirname, '..', 'fonts'),
+    path.join(process.cwd(), 'fonts'),
+  ];
+  const fontFiles: string[] = [];
+
+  for (const dir of fontDirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const entry of fs.readdirSync(dir)) {
+      if (/\.(ttf|otf|woff2?)$/i.test(entry)) {
+        fontFiles.push(path.join(dir, entry));
+      }
+    }
+  }
+
+  if (fontFiles.length === 0) {
+    logger.warn('[Poster] No custom fonts found under worker/fonts or fonts. Falling back to installed fonts.');
+    return '';
+  }
+
+  return fontFiles
+    .map((filePath) => {
+      const family = path.basename(filePath).replace(/\.(ttf|otf|woff2?)$/i, '');
+      const fileUrl = `file://${filePath.replace(/\\/g, '/')}`;
+      return `
+        @font-face {
+          font-family: "${escapeHtml(family)}";
+          src: url("${fileUrl}");
+          font-display: swap;
+        }
+      `;
+    })
+    .join('\n');
+}
+
+function buildPosterHtml(payload: RenderPayload): string {
+  const width = Math.max(1, Math.round(payload.width));
+  const height = Math.max(1, Math.round(payload.height));
+  const fontFaces = discoverFontFaces();
+
+  const backgroundHtml = payload.backgroundImage
+    ? `<img class="poster-bg" src="${escapeHtml(normalizeAssetUrl(payload.backgroundImage))}" alt="" />`
+    : '';
+
+  const imageHtml = (payload.images || [])
+    .map((image, index) => {
+      const rotation = Number(image.rotate ?? image.rotation ?? 0) || 0;
+      const scaleX = Number(image.scaleX) || 1;
+      const scaleY = Number(image.scaleY) || 1;
+      const opacity = typeof image.opacity === 'number' ? image.opacity : 1;
+      const maskCss =
+        image.maskUrl && image.maskRect
+          ? `
+            -webkit-mask-image: url("${escapeHtml(normalizeAssetUrl(image.maskUrl))}");
+            -webkit-mask-repeat: no-repeat;
+            -webkit-mask-size: ${Math.max(1, Math.round(image.maskRect.width))}px ${Math.max(1, Math.round(image.maskRect.height))}px;
+            -webkit-mask-position: ${Math.round(image.maskRect.x - image.x)}px ${Math.round(image.maskRect.y - image.y)}px;
+            mask-image: url("${escapeHtml(normalizeAssetUrl(image.maskUrl))}");
+            mask-repeat: no-repeat;
+            mask-size: ${Math.max(1, Math.round(image.maskRect.width))}px ${Math.max(1, Math.round(image.maskRect.height))}px;
+            mask-position: ${Math.round(image.maskRect.x - image.x)}px ${Math.round(image.maskRect.y - image.y)}px;
+          `
+          : '';
+
+      return `
+        <img
+          class="poster-image"
+          src="${escapeHtml(normalizeAssetUrl(image.url))}"
+          alt=""
+          style="
+            left:${Math.round(image.x)}px;
+            top:${Math.round(image.y)}px;
+            width:${Math.max(1, Math.round(image.width))}px;
+            height:${Math.max(1, Math.round(image.height))}px;
+            opacity:${opacity};
+            border-radius:${Math.max(0, Math.round(image.borderRadius || 0))}px;
+            transform: translateZ(0) rotate(${rotation}deg) scale(${scaleX}, ${scaleY});
+            z-index:${index + 1};
+            ${maskCss}
+          "
+        />`;
+    })
+    .join('\n');
+
+  const textHtml = (payload.texts || [])
+    .map((item, index) => {
+      const direction = detectDirection(item.text, item.direction);
+      const align = (item.align || item.textAlign || (direction === 'rtl' ? 'right' : 'left')).toLowerCase();
+      const rotation = Number(item.rotate ?? item.rotation ?? 0) || 0;
+      const scaleX = Number(item.scaleX) || 1;
+      const scaleY = Number(item.scaleY) || 1;
+      const widthStyle = item.width ? `width:${Math.max(1, Math.round(item.width))}px;` : '';
+      const heightStyle = item.height ? `min-height:${Math.max(1, Math.round(item.height))}px;` : '';
+      const opacity = typeof item.opacity === 'number' ? item.opacity : 1;
+      const lineHeight = typeof item.lineHeight === 'number' && item.lineHeight > 0 ? item.lineHeight : 1.4;
+      const letterSpacing = typeof item.letterSpacing === 'number' ? item.letterSpacing : 0;
+      const fontWeight = item.fontWeight ?? 'normal';
+      const fontFamily = item.fontFamily ? `"${escapeHtml(item.fontFamily)}"` : '"Noto Naskh Arabic"';
+
+      return `
+        <div
+          class="poster-text"
+          style="
+            left:${Math.round(item.x)}px;
+            top:${Math.round(item.y)}px;
+            ${widthStyle}
+            ${heightStyle}
+            font-size:${Math.max(1, Math.round(item.fontSize || 32))}px;
+            color:${escapeHtml(toCssColor(item.color, '#111111'))};
+            font-family:${fontFamily}, 'Noto Naskh Arabic', serif;
+            font-weight:${escapeHtml(String(fontWeight))};
+            text-align:${escapeHtml(align)};
+            direction:${direction};
+            line-height:${lineHeight};
+            letter-spacing:${letterSpacing}px;
+            opacity:${opacity};
+            transform: translateZ(0) rotate(${rotation}deg) scale(${scaleX}, ${scaleY});
+            z-index:${100 + index};
+          "
+        >${escapeHtml(item.text)}</div>`;
+    })
+    .join('\n');
+
+  return `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          ${fontFaces}
+
+          * {
+            box-sizing: border-box;
+          }
+
+          html, body {
+            margin: 0;
+            width: ${width}px;
+            height: ${height}px;
+            overflow: hidden;
+            background: transparent;
+          }
+
+          body {
+            font-family: 'Noto Naskh Arabic', serif;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: geometricPrecision;
+          }
+
+          .poster {
+            position: relative;
+            width: ${width}px;
+            height: ${height}px;
+            overflow: hidden;
+            background: #ffffff;
+          }
+
+          .poster-bg,
+          .poster-image {
+            position: absolute;
+            display: block;
+            object-fit: cover;
+            transform-origin: center center;
+          }
+
+          .poster-bg {
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+          }
+
+          .poster-text {
+            position: absolute;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            unicode-bidi: plaintext;
+            transform-origin: center center;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="poster">
+          ${backgroundHtml}
+          ${imageHtml}
+          ${textHtml}
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+async function getBrowser(): Promise<Browser> {
+  if (!browserPromise) {
+    browserPromise = puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'],
+    });
+  }
+  return browserPromise;
+}
+
+async function waitForImages(page: any): Promise<void> {
+  await page.evaluate(async () => {
+    const images = Array.from(document.images);
+    await Promise.all(
+      images.map(
+        (image) =>
+          new Promise<void>((resolve) => {
+            if (image.complete) {
+              resolve();
+              return;
+            }
+            image.addEventListener('load', () => resolve(), { once: true });
+            image.addEventListener('error', () => resolve(), { once: true });
+          }),
+      ),
+    );
+    await document.fonts.ready;
+  });
+}
+
+async function renderImage(template: any): Promise<string> {
+  const payload = normalizeRenderPayload(template);
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  const width = Math.max(1, Math.round(payload.width));
+  const height = Math.max(1, Math.round(payload.height));
+
+  logger.info(
+    `[Poster] Rendering via Puppeteer width=${width} height=${height} texts=${payload.texts?.length || 0} images=${
+      payload.images?.length || 0
+    } background=${payload.backgroundImage ? 'yes' : 'no'}`,
+  );
+
+  try {
+    await page.setViewport({
       width,
       height,
-      channels: 4,
-      background: { r: 255, g: 255, b: 255, alpha: 1 },
-    },
-  });
+      deviceScaleFactor: 2,
+    });
 
-  const outputBuffer = await baseCanvas
-    .composite(composites)
-    .png()
-    .toBuffer();
+    await page.setContent(buildPosterHtml(payload), {
+      waitUntil: 'domcontentloaded',
+    });
 
-  // Return image directly to avoid cross-container shared-disk issues in Sealos.
-  return `data:image/png;base64,${outputBuffer.toString('base64')}`;
+    await waitForImages(page);
+
+    const outputBuffer = await page.screenshot({
+      type: 'png',
+      omitBackground: false,
+    });
+
+    return `data:image/png;base64,${outputBuffer.toString('base64')}`;
+  } finally {
+    await page.close();
+  }
 }
 
 const worker = new Queue('renderQueue', { redis: connection });
 
-logger.info('[Worker] Connected to Redis. Registering EXPLICIT process handler (render-job, Concurrency: 5)...');
+logger.info('[Worker] Connected to Redis. Registering render-job process handler (Puppeteer renderer, concurrency: 2)...');
 
-worker.process('render-job', 5, async (job: Job) => {
+worker.process('render-job', 2, async (job: Job) => {
   logger.info(`[Worker] Picked up job ${job.id} (Name: ${job.name}, Attempt: ${job.attemptsMade + 1})`);
   try {
     const outputUrl = await renderImage(job.data.template);
-    logger.info(`[Worker] Completed job ${job.id}, output: ${outputUrl}`);
+    logger.info(`[Worker] Completed job ${job.id}, outputLength=${outputUrl.length}`);
     return outputUrl;
   } catch (error) {
-    logger.error(`[Worker] Error on job ${job.id}:`, error);
+    logger.error(`[Worker] Error on job ${job.id}:`, error instanceof Error ? error.stack || error.message : String(error));
     throw error;
   }
 });
 
 logger.info('[Worker] is ready to process render jobs.');
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('[Worker] SIGTERM received. Closing queue...');
+async function closeWorkerAndBrowser() {
   await worker.close();
+  if (browserPromise) {
+    const browser = await browserPromise;
+    await browser.close();
+    browserPromise = null;
+  }
+}
+
+process.on('SIGTERM', async () => {
+  logger.info('[Worker] SIGTERM received. Closing queue and browser...');
+  await closeWorkerAndBrowser();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  logger.info('[Worker] SIGINT received. Closing queue...');
-  await worker.close();
+  logger.info('[Worker] SIGINT received. Closing queue and browser...');
+  await closeWorkerAndBrowser();
   process.exit(0);
 });
