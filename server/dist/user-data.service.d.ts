@@ -1,11 +1,13 @@
 import { Repository } from 'typeorm';
 import { SaveDraftDto, SaveFavoriteDto } from './dto/user-data.dto';
+import { WinstonLoggerService } from './logger.service';
 import { UserDraft } from './user-draft.entity';
 import { UserFavorite } from './user-favorite.entity';
 export declare class UserDataService {
     private readonly favoriteRepo;
     private readonly draftRepo;
-    constructor(favoriteRepo: Repository<UserFavorite>, draftRepo: Repository<UserDraft>);
+    private readonly logger;
+    constructor(favoriteRepo: Repository<UserFavorite>, draftRepo: Repository<UserDraft>, logger: WinstonLoggerService);
     listFavorites(userId: string): Promise<{
         success: boolean;
         data: {
@@ -34,20 +36,16 @@ export declare class UserDataService {
             templateWidth: number;
             templateHeight: number;
             elementsJson: string;
-            elements: any;
-            createdAt: Date;
-            updatedAt: Date;
+            updatedAt: number;
         }[];
     }>;
     saveDraft(userId: string, body: SaveDraftDto): Promise<{
         success: boolean;
-        message: string;
-    } | {
-        success: boolean;
-        message?: undefined;
     }>;
     deleteDraft(userId: string, id: string): Promise<{
         success: boolean;
     }>;
+    private normalizeDraftElements;
+    private normalizeDimension;
     private parseElements;
 }

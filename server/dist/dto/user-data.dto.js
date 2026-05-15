@@ -20,8 +20,8 @@ class SaveFavoriteDto {
 }
 exports.SaveFavoriteDto = SaveFavoriteDto;
 __decorate([
-    (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(128),
     __metadata("design:type", String)
 ], SaveFavoriteDto.prototype, "templateId", void 0);
@@ -48,10 +48,18 @@ class DraftElementDto {
 class SaveDraftDto {
     id;
     templateId;
+    template_id;
     coverImage;
+    cover_image;
     templateWidth;
+    template_width;
     templateHeight;
+    template_height;
     elements;
+    layers;
+    elementsJson;
+    elements_json;
+    updatedAt;
 }
 exports.SaveDraftDto = SaveDraftDto;
 __decorate([
@@ -69,9 +77,21 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(128),
+    __metadata("design:type", String)
+], SaveDraftDto.prototype, "template_id", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(1024),
     __metadata("design:type", String)
 ], SaveDraftDto.prototype, "coverImage", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(1024),
+    __metadata("design:type", String)
+], SaveDraftDto.prototype, "cover_image", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
@@ -81,11 +101,43 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
+], SaveDraftDto.prototype, "template_width", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    __metadata("design:type", Number)
 ], SaveDraftDto.prototype, "templateHeight", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    __metadata("design:type", Number)
+], SaveDraftDto.prototype, "template_height", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.ValidateNested)({ each: true }),
     (0, class_transformer_1.Type)(() => DraftElementDto),
     __metadata("design:type", Array)
 ], SaveDraftDto.prototype, "elements", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ValidateNested)({ each: true }),
+    (0, class_transformer_1.Type)(() => DraftElementDto),
+    __metadata("design:type", Array)
+], SaveDraftDto.prototype, "layers", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SaveDraftDto.prototype, "elementsJson", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SaveDraftDto.prototype, "elements_json", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], SaveDraftDto.prototype, "updatedAt", void 0);
 //# sourceMappingURL=user-data.dto.js.map

@@ -121,17 +121,11 @@ export declare class AppController {
             templateWidth: number;
             templateHeight: number;
             elementsJson: string;
-            elements: any;
-            createdAt: Date;
-            updatedAt: Date;
+            updatedAt: number;
         }[];
     }>;
     saveDraft(user: AuthenticatedRequestUser, body: SaveDraftDto): Promise<{
         success: boolean;
-        message: string;
-    } | {
-        success: boolean;
-        message?: undefined;
     }>;
     deleteDraft(user: AuthenticatedRequestUser, id: string): Promise<{
         success: boolean;

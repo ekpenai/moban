@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SaveDraftDto, SaveFavoriteDto } from './dto/user-data.dto';
+import { WinstonLoggerService } from './logger.service';
 import { UserDraft } from './user-draft.entity';
 import { UserFavorite } from './user-favorite.entity';
 
@@ -10,6 +11,7 @@ export class UserDataService {
   constructor(
     @InjectRepository(UserFavorite) private readonly favoriteRepo: Repository<UserFavorite>,
     @InjectRepository(UserDraft) private readonly draftRepo: Repository<UserDraft>,
+    private readonly logger: WinstonLoggerService,
   ) {}
 
   async listFavorites(userId: string) {
@@ -61,10 +63,21 @@ export class UserDataService {
   }
 
   async listDrafts(userId: string) {
+    const startedAt = Date.now();
+    this.logger.log(`[drafts] list start userId=${userId}`);
+
     const list = await this.draftRepo.find({
       where: { userId },
       order: { updatedAt: 'DESC' },
     });
+
+    const durationMs = Date.now() - startedAt;
+    const elementsSummary =
+      list.map((item) => `${item.id}:${item.elementsJson?.length || 0}`).join(',') || 'none';
+
+    this.logger.log(
+      `[drafts] list done userId=${userId} count=${list.length} durationMs=${durationMs} elementsJson=${elementsSummary}`,
+    );
 
     return {
       success: true,
@@ -75,18 +88,37 @@ export class UserDataService {
         templateWidth: item.templateWidth,
         templateHeight: item.templateHeight,
         elementsJson: item.elementsJson,
-        elements: this.parseElements(item.elementsJson),
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
+        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.getTime() : item.updatedAt,
       })),
     };
   }
 
   async saveDraft(userId: string, body: SaveDraftDto) {
+    const startedAt = Date.now();
     const draftId = String(body.id || '').trim();
     if (!draftId) {
-      return { success: false, message: '缺少草稿 id' };
+      throw new BadRequestException({ success: false, message: '缺少草稿 id' });
     }
+
+    const templateId = String(body.templateId || body.template_id || '').trim();
+    const coverImage = String(body.coverImage || body.cover_image || '').trim();
+    const templateWidth = this.normalizeDimension(body.templateWidth, body.template_width, 675);
+    const templateHeight = this.normalizeDimension(body.templateHeight, body.template_height, 1200);
+    const elements = this.normalizeDraftElements(body);
+
+    this.logger.log(
+      `[drafts] save start userId=${userId} draftId=${draftId} templateId=${templateId || 'none'} hasElements=${
+        Array.isArray(body.elements)
+      } hasLayers=${Array.isArray(body.layers)} hasElementsJson=${typeof body.elementsJson === 'string'} hasElements_json=${
+        typeof body.elements_json === 'string'
+      } normalizedCount=${elements.length}`,
+    );
+
+    if (!Array.isArray(elements) || elements.length === 0) {
+      throw new BadRequestException({ success: false, message: '草稿图层为空' });
+    }
+
+    const elementsJson = JSON.stringify(elements);
 
     let draft = await this.draftRepo.findOne({
       where: { id: draftId, userId },
@@ -99,13 +131,17 @@ export class UserDataService {
       });
     }
 
-    draft.templateId = body.templateId?.trim() || '';
-    draft.coverImage = body.coverImage?.trim() || '';
-    draft.templateWidth = Number.isFinite(body.templateWidth) ? Number(body.templateWidth) : 675;
-    draft.templateHeight = Number.isFinite(body.templateHeight) ? Number(body.templateHeight) : 1200;
-    draft.elementsJson = JSON.stringify(body.elements ?? []);
+    draft.templateId = templateId;
+    draft.coverImage = coverImage;
+    draft.templateWidth = templateWidth;
+    draft.templateHeight = templateHeight;
+    draft.elementsJson = elementsJson;
 
     await this.draftRepo.save(draft);
+    this.logger.log(
+      `[drafts] save done userId=${userId} draftId=${draftId} durationMs=${Date.now() - startedAt} elementsJsonLength=${elementsJson.length}`,
+    );
+
     return { success: true };
   }
 
@@ -114,9 +150,41 @@ export class UserDataService {
     return { success: true };
   }
 
+  private normalizeDraftElements(body: SaveDraftDto): unknown[] {
+    if (typeof body.elementsJson === 'string' && body.elementsJson.trim()) {
+      const parsed = this.parseElements(body.elementsJson);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+
+    if (typeof body.elements_json === 'string' && body.elements_json.trim()) {
+      const parsed = this.parseElements(body.elements_json);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+
+    if (Array.isArray(body.elements)) {
+      return body.elements;
+    }
+
+    if (Array.isArray(body.layers)) {
+      return body.layers;
+    }
+
+    return [];
+  }
+
+  private normalizeDimension(primary: number | undefined, fallback: number | undefined, defaultValue: number): number {
+    const value = Number(primary ?? fallback);
+    return Number.isFinite(value) && value > 0 ? value : defaultValue;
+  }
+
   private parseElements(value: string) {
     try {
-      return JSON.parse(value);
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }

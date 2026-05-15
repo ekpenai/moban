@@ -2,8 +2,8 @@ import { Type } from 'class-transformer';
 import { IsArray, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 
 export class SaveFavoriteDto {
-  @IsString()
   @IsOptional()
+  @IsString()
   @MaxLength(128)
   templateId?: string;
 
@@ -40,8 +40,18 @@ export class SaveDraftDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(128)
+  template_id?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(1024)
   coverImage?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  cover_image?: string;
 
   @IsOptional()
   @Type(() => Number)
@@ -49,10 +59,36 @@ export class SaveDraftDto {
 
   @IsOptional()
   @Type(() => Number)
+  template_width?: number;
+
+  @IsOptional()
+  @Type(() => Number)
   templateHeight?: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  template_height?: number;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => DraftElementDto)
-  elements: DraftElementDto[];
+  elements?: DraftElementDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DraftElementDto)
+  layers?: DraftElementDto[];
+
+  @IsOptional()
+  @IsString()
+  elementsJson?: string;
+
+  @IsOptional()
+  @IsString()
+  elements_json?: string;
+
+  @IsOptional()
+  updatedAt?: number;
 }
