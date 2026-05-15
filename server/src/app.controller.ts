@@ -483,19 +483,11 @@ export class AppController {
 
     if (state === 'completed') {
       const returnValue = job.returnvalue;
-      let imageUrl = returnValue?.imageUrl || job.data?.uploadedImageUrl;
+      const imageUrl = returnValue?.imageUrl || job.data?.uploadedImageUrl;
       let imageBase64 = returnValue?.imageBase64;
 
       if (!imageUrl && typeof returnValue === 'string' && returnValue.startsWith('data:image/')) {
         imageBase64 = returnValue;
-      }
-
-      if (!imageUrl && imageBase64) {
-        imageUrl = await this.s3Service.uploadBase64(imageBase64, 'renders');
-        await job.update({
-          ...job.data,
-          uploadedImageUrl: imageUrl,
-        });
       }
 
       return {

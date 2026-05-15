@@ -4,6 +4,7 @@ import * as winston from 'winston';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import puppeteer, { Browser } from 'puppeteer';
 
 dotenv.config({ path: path.join(__dirname, '..', 'server', '.env') });
@@ -78,7 +79,13 @@ type RenderPayload = {
   images?: PosterImageItem[];
 };
 
+type RenderResult = {
+  imageUrl?: string;
+  imageBase64?: string;
+};
+
 let browserPromise: Promise<Browser> | null = null;
+let s3Client: S3Client | null = null;
 
 function escapeHtml(value: string): string {
   return value
@@ -373,7 +380,12 @@ async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
     browserPromise = puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--font-render-hinting=none',
+        '--disable-dev-shm-usage',
+      ],
     });
   }
   return browserPromise;
@@ -381,10 +393,17 @@ async function getBrowser(): Promise<Browser> {
 
 async function waitForImages(page: any): Promise<void> {
   await page.evaluate(async () => {
+    const withTimeout = async (promise: Promise<unknown>, timeoutMs: number) => {
+      await Promise.race([
+        promise,
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    };
+
     const images = Array.from(document.images);
     await Promise.all(
-      images.map(
-        (image) =>
+      images.map((image) =>
+        withTimeout(
           new Promise<void>((resolve) => {
             if (image.complete) {
               resolve();
@@ -393,13 +412,18 @@ async function waitForImages(page: any): Promise<void> {
             image.addEventListener('load', () => resolve(), { once: true });
             image.addEventListener('error', () => resolve(), { once: true });
           }),
+          8000,
+        ),
       ),
     );
-    await document.fonts.ready;
+
+    if (document.fonts?.ready) {
+      await withTimeout(document.fonts.ready, 5000);
+    }
   });
 }
 
-async function renderImage(template: any, onProgress?: (progress: number) => Promise<void> | void): Promise<string> {
+async function renderImage(template: any, onProgress?: (progress: number) => Promise<void> | void): Promise<Buffer> {
   const payload = normalizeRenderPayload(template);
   await onProgress?.(10);
   const browser = await getBrowser();
@@ -436,10 +460,48 @@ async function renderImage(template: any, onProgress?: (progress: number) => Pro
     });
     await onProgress?.(95);
 
-    return `data:image/png;base64,${Buffer.from(outputBuffer).toString('base64')}`;
+    return Buffer.from(outputBuffer);
   } finally {
     await page.close();
   }
+}
+
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    s3Client = new S3Client({
+      endpoint:
+        process.env.NODE_ENV === 'production'
+          ? 'http://object-storage.objectstorage-system.svc.cluster.local'
+          : process.env.S3_ENDPOINT || 'https://objectstorageapi.bja.sealos.run',
+      region: process.env.S3_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY || 'ujw2lrwn',
+        secretAccessKey: process.env.S3_SECRET_KEY || '26mhbpxmjdj8qrnx',
+      },
+      forcePathStyle: true,
+    });
+  }
+  return s3Client;
+}
+
+async function uploadRenderBuffer(outputBuffer: Buffer): Promise<string | null> {
+  const bucketName = (process.env.S3_BUCKET_NAME || '').trim();
+  const publicUrl = (process.env.S3_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+  if (!bucketName || !publicUrl) {
+    return null;
+  }
+
+  const filename = `renders/${Date.now()}-${Math.round(Math.random() * 1e9)}.png`;
+  const client = getS3Client();
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: filename,
+      Body: outputBuffer,
+      ContentType: 'image/png',
+    }),
+  );
+  return `${publicUrl}/${filename}`;
 }
 
 const worker = new Queue('renderQueue', { redis: connection });
@@ -450,14 +512,19 @@ worker.process('render-job', 2, async (job: Job) => {
   logger.info(`[Worker] Picked up job ${job.id} (Name: ${job.name}, Attempt: ${job.attemptsMade + 1})`);
   try {
     await job.progress(5);
-    const imageBase64 = await renderImage(job.data.template, async (progress) => {
+    const outputBuffer = await renderImage(job.data.template, async (progress) => {
       await job.progress(progress);
     });
+    await job.progress(96);
+    const imageUrl = await uploadRenderBuffer(outputBuffer);
     await job.progress(100);
-    logger.info(`[Worker] Completed job ${job.id}, outputLength=${imageBase64.length}`);
-    return {
-      imageBase64,
-    };
+    logger.info(
+      `[Worker] Completed job ${job.id}, outputLength=${outputBuffer.length}, uploaded=${imageUrl ? 'yes' : 'no'}`,
+    );
+    const result: RenderResult = imageUrl
+      ? { imageUrl }
+      : { imageBase64: `data:image/png;base64,${outputBuffer.toString('base64')}` };
+    return result;
   } catch (error) {
     logger.error(`[Worker] Error on job ${job.id}:`, error instanceof Error ? error.stack || error.message : String(error));
     throw error;
