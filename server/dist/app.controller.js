@@ -57,6 +57,7 @@ const typeorm_2 = require("typeorm");
 const template_entity_1 = require("./template.entity");
 const setting_entity_1 = require("./setting.entity");
 const template_dto_1 = require("./dto/template.dto");
+const profile_dto_1 = require("./dto/profile.dto");
 const wechat_login_dto_1 = require("./dto/wechat-login.dto");
 const user_data_dto_1 = require("./dto/user-data.dto");
 const logger_service_1 = require("./logger.service");
@@ -244,6 +245,12 @@ let AppController = class AppController {
     }
     async wechatLogin(body) {
         return this.wechatAuthService.login(body);
+    }
+    async getProfile(user) {
+        return this.wechatAuthService.getProfile(user.userId);
+    }
+    async updateProfile(user, body) {
+        return this.wechatAuthService.updateProfile(user.userId, body);
     }
     async listFavorites(user) {
         return this.userDataService.listFavorites(user.userId);
@@ -466,6 +473,23 @@ __decorate([
     __metadata("design:paramtypes", [wechat_login_dto_1.WechatLoginDto]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "wechatLogin", null);
+__decorate([
+    (0, common_1.Get)('me/profile'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getProfile", null);
+__decorate([
+    (0, common_1.Post)('me/profile'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, profile_dto_1.UpdateProfileDto]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updateProfile", null);
 __decorate([
     (0, common_1.Get)('me/favorites'),
     (0, common_1.UseGuards)(auth_guard_1.AuthGuard),

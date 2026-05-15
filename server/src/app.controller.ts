@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
 import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
+import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
 import { SaveDraftDto, SaveFavoriteDto } from './dto/user-data.dto';
 import { WinstonLoggerService } from './logger.service';
@@ -223,6 +224,18 @@ export class AppController {
   @Post('auth/wechat-login')
   async wechatLogin(@Body() body: WechatLoginDto) {
     return this.wechatAuthService.login(body);
+  }
+
+  @Get('me/profile')
+  @UseGuards(AuthGuard)
+  async getProfile(@CurrentUser() user: AuthenticatedRequestUser) {
+    return this.wechatAuthService.getProfile(user.userId);
+  }
+
+  @Post('me/profile')
+  @UseGuards(AuthGuard)
+  async updateProfile(@CurrentUser() user: AuthenticatedRequestUser, @Body() body: UpdateProfileDto) {
+    return this.wechatAuthService.updateProfile(user.userId, body);
   }
 
   @Get('me/favorites')

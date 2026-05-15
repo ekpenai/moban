@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { AuthTokenService } from './auth-token.service';
+import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
 import { WxUser } from './wx-user.entity';
 type ClientWechatUser = {
@@ -26,7 +27,16 @@ export declare class WechatAuthService {
         token: string;
         user: ClientWechatUser;
     }>;
+    getProfile(userId: string): Promise<{
+        success: true;
+        user: ClientWechatUser;
+    }>;
+    updateProfile(userId: string, body: UpdateProfileDto): Promise<{
+        success: true;
+        user: ClientWechatUser;
+    }>;
     private normalizeProfile;
+    private safeString;
     private getWechatSession;
     private toClientUser;
 }

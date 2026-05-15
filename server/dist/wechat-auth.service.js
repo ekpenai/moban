@@ -70,17 +70,55 @@ let WechatAuthService = class WechatAuthService {
             user: this.toClientUser(savedUser),
         };
     }
-    normalizeProfile(userInfo) {
-        const safeString = (value, maxLength) => typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+    async getProfile(userId) {
+        const user = await this.wxUserRepo.findOne({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.InternalServerErrorException({
+                success: false,
+                message: '用户不存在',
+            });
+        }
         return {
-            nickName: safeString(userInfo?.nickName, 64) || '微信用户',
-            avatarUrl: safeString(userInfo?.avatarUrl, 512),
-            gender: Number.isFinite(userInfo?.gender) ? Math.max(0, Number(userInfo?.gender)) : 0,
-            country: safeString(userInfo?.country, 64),
-            province: safeString(userInfo?.province, 64),
-            city: safeString(userInfo?.city, 64),
-            language: safeString(userInfo?.language, 32),
+            success: true,
+            user: this.toClientUser(user),
         };
+    }
+    async updateProfile(userId, body) {
+        const user = await this.wxUserRepo.findOne({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.InternalServerErrorException({
+                success: false,
+                message: '用户不存在',
+            });
+        }
+        const nickName = this.safeString(body.nickName, 64);
+        const hasAvatarUrl = typeof body.avatarUrl === 'string';
+        const avatarUrl = this.safeString(body.avatarUrl, 512);
+        if (nickName) {
+            user.nickName = nickName;
+        }
+        if (hasAvatarUrl) {
+            user.avatarUrl = avatarUrl;
+        }
+        const savedUser = await this.wxUserRepo.save(user);
+        return {
+            success: true,
+            user: this.toClientUser(savedUser),
+        };
+    }
+    normalizeProfile(userInfo) {
+        return {
+            nickName: this.safeString(userInfo?.nickName, 64) || '微信用户',
+            avatarUrl: this.safeString(userInfo?.avatarUrl, 512),
+            gender: Number.isFinite(userInfo?.gender) ? Math.max(0, Number(userInfo?.gender)) : 0,
+            country: this.safeString(userInfo?.country, 64),
+            province: this.safeString(userInfo?.province, 64),
+            city: this.safeString(userInfo?.city, 64),
+            language: this.safeString(userInfo?.language, 32),
+        };
+    }
+    safeString(value, maxLength) {
+        return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
     }
     async getWechatSession(code, appid, secret) {
         const url = new URL('https://api.weixin.qq.com/sns/jscode2session');

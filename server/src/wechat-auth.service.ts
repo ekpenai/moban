@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthTokenService } from './auth-token.service';
+import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto, WechatUserInfoDto } from './dto/wechat-login.dto';
 import { WxUser } from './wx-user.entity';
 
@@ -51,11 +52,11 @@ export class WechatAuthService {
     const profile = this.normalizeProfile(body.userInfo);
     const now = new Date();
 
-    let user = await this.wxUserRepo.findOne({ where: { openid: session.openid as string } });
+    let user = await this.wxUserRepo.findOne({ where: { openid: session.openid } });
 
     if (!user) {
       user = this.wxUserRepo.create({
-        openid: session.openid as string,
+        openid: session.openid,
         unionid: session.unionid ?? null,
         appid,
         ...profile,
@@ -84,19 +85,66 @@ export class WechatAuthService {
     };
   }
 
-  private normalizeProfile(userInfo?: WechatUserInfoDto) {
-    const safeString = (value: string | undefined, maxLength: number): string =>
-      typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+  async getProfile(userId: string): Promise<{ success: true; user: ClientWechatUser }> {
+    const user = await this.wxUserRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new InternalServerErrorException({
+        success: false,
+        message: '用户不存在',
+      });
+    }
 
     return {
-      nickName: safeString(userInfo?.nickName, 64) || '微信用户',
-      avatarUrl: safeString(userInfo?.avatarUrl, 512),
-      gender: Number.isFinite(userInfo?.gender) ? Math.max(0, Number(userInfo?.gender)) : 0,
-      country: safeString(userInfo?.country, 64),
-      province: safeString(userInfo?.province, 64),
-      city: safeString(userInfo?.city, 64),
-      language: safeString(userInfo?.language, 32),
+      success: true,
+      user: this.toClientUser(user),
     };
+  }
+
+  async updateProfile(
+    userId: string,
+    body: UpdateProfileDto,
+  ): Promise<{ success: true; user: ClientWechatUser }> {
+    const user = await this.wxUserRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new InternalServerErrorException({
+        success: false,
+        message: '用户不存在',
+      });
+    }
+
+    const nickName = this.safeString(body.nickName, 64);
+    const hasAvatarUrl = typeof body.avatarUrl === 'string';
+    const avatarUrl = this.safeString(body.avatarUrl, 512);
+
+    if (nickName) {
+      user.nickName = nickName;
+    }
+
+    if (hasAvatarUrl) {
+      user.avatarUrl = avatarUrl;
+    }
+
+    const savedUser = await this.wxUserRepo.save(user);
+    return {
+      success: true,
+      user: this.toClientUser(savedUser),
+    };
+  }
+
+  private normalizeProfile(userInfo?: WechatUserInfoDto) {
+    return {
+      nickName: this.safeString(userInfo?.nickName, 64) || '微信用户',
+      avatarUrl: this.safeString(userInfo?.avatarUrl, 512),
+      gender: Number.isFinite(userInfo?.gender) ? Math.max(0, Number(userInfo?.gender)) : 0,
+      country: this.safeString(userInfo?.country, 64),
+      province: this.safeString(userInfo?.province, 64),
+      city: this.safeString(userInfo?.city, 64),
+      language: this.safeString(userInfo?.language, 32),
+    };
+  }
+
+  private safeString(value: string | undefined, maxLength: number): string {
+    return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
   }
 
   private async getWechatSession(

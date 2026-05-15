@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
 import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
+import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
 import { SaveDraftDto, SaveFavoriteDto } from './dto/user-data.dto';
 import { WinstonLoggerService } from './logger.service';
@@ -46,6 +47,38 @@ export declare class AppController {
     wechatLogin(body: WechatLoginDto): Promise<{
         success: true;
         token: string;
+        user: {
+            id: number;
+            nickName: string;
+            avatarUrl: string;
+            gender: number;
+            country: string;
+            province: string;
+            city: string;
+            language: string;
+            createdAt: Date;
+            updatedAt: Date;
+            lastLoginAt: Date | null;
+        };
+    }>;
+    getProfile(user: AuthenticatedRequestUser): Promise<{
+        success: true;
+        user: {
+            id: number;
+            nickName: string;
+            avatarUrl: string;
+            gender: number;
+            country: string;
+            province: string;
+            city: string;
+            language: string;
+            createdAt: Date;
+            updatedAt: Date;
+            lastLoginAt: Date | null;
+        };
+    }>;
+    updateProfile(user: AuthenticatedRequestUser, body: UpdateProfileDto): Promise<{
+        success: true;
         user: {
             id: number;
             nickName: string;
