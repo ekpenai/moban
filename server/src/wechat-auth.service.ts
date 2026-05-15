@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AuthTokenService } from './auth-token.service';
 import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto, WechatUserInfoDto } from './dto/wechat-login.dto';
+import { WinstonLoggerService } from './logger.service';
 import { WxUser } from './wx-user.entity';
 
 type WechatSessionResponse = {
@@ -35,6 +36,7 @@ export class WechatAuthService {
     private readonly configService: ConfigService,
     @InjectRepository(WxUser) private readonly wxUserRepo: Repository<WxUser>,
     private readonly authTokenService: AuthTokenService,
+    private readonly logger: WinstonLoggerService,
   ) {}
 
   async login(body: WechatLoginDto): Promise<{ success: true; token: string; user: ClientWechatUser }> {
@@ -48,11 +50,30 @@ export class WechatAuthService {
       });
     }
 
+    this.logger.log(
+      `[wechat-login] request received appid=${appid} code=${this.maskValue(body.code, 6, 4)}`,
+    );
+
     const session = await this.getWechatSession(body.code, appid, secret);
+    this.logger.log(
+      `[wechat-login] jscode2session resolved appid=${appid} openid=${this.maskValue(
+        session.openid,
+        6,
+        4,
+      )} unionid=${this.maskValue(session.unionid, 4, 4)}`,
+    );
+
     const profile = this.normalizeProfile(body.userInfo);
     const now = new Date();
 
     let user = await this.wxUserRepo.findOne({ where: { openid: session.openid } });
+    const action = user ? 'update-existing-user' : 'create-new-user';
+
+    this.logger.log(
+      `[wechat-login] db lookup action=${action} openid=${this.maskValue(session.openid, 6, 4)} existingUserId=${
+        user?.id ?? 'none'
+      }`,
+    );
 
     if (!user) {
       user = this.wxUserRepo.create({
@@ -77,6 +98,14 @@ export class WechatAuthService {
 
     const savedUser = await this.wxUserRepo.save(user);
     const token = this.authTokenService.sign(savedUser.id, savedUser.appid);
+
+    this.logger.log(
+      `[wechat-login] completed action=${action} userId=${savedUser.id} openid=${this.maskValue(
+        savedUser.openid,
+        6,
+        4,
+      )}`,
+    );
 
     return {
       success: true,
@@ -145,6 +174,18 @@ export class WechatAuthService {
 
   private safeString(value: string | undefined, maxLength: number): string {
     return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+  }
+
+  private maskValue(value: string | null | undefined, prefixLength: number, suffixLength: number): string {
+    if (!value) {
+      return 'none';
+    }
+
+    if (value.length <= prefixLength + suffixLength) {
+      return value;
+    }
+
+    return `${value.slice(0, prefixLength)}...${value.slice(-suffixLength)}`;
   }
 
   private async getWechatSession(

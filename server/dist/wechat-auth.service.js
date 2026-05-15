@@ -18,15 +18,18 @@ const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const auth_token_service_1 = require("./auth-token.service");
+const logger_service_1 = require("./logger.service");
 const wx_user_entity_1 = require("./wx-user.entity");
 let WechatAuthService = class WechatAuthService {
     configService;
     wxUserRepo;
     authTokenService;
-    constructor(configService, wxUserRepo, authTokenService) {
+    logger;
+    constructor(configService, wxUserRepo, authTokenService, logger) {
         this.configService = configService;
         this.wxUserRepo = wxUserRepo;
         this.authTokenService = authTokenService;
+        this.logger = logger;
     }
     async login(body) {
         const appid = this.configService.get('WECHAT_APPID')?.trim();
@@ -37,10 +40,14 @@ let WechatAuthService = class WechatAuthService {
                 message: '微信登录未配置',
             });
         }
+        this.logger.log(`[wechat-login] request received appid=${appid} code=${this.maskValue(body.code, 6, 4)}`);
         const session = await this.getWechatSession(body.code, appid, secret);
+        this.logger.log(`[wechat-login] jscode2session resolved appid=${appid} openid=${this.maskValue(session.openid, 6, 4)} unionid=${this.maskValue(session.unionid, 4, 4)}`);
         const profile = this.normalizeProfile(body.userInfo);
         const now = new Date();
         let user = await this.wxUserRepo.findOne({ where: { openid: session.openid } });
+        const action = user ? 'update-existing-user' : 'create-new-user';
+        this.logger.log(`[wechat-login] db lookup action=${action} openid=${this.maskValue(session.openid, 6, 4)} existingUserId=${user?.id ?? 'none'}`);
         if (!user) {
             user = this.wxUserRepo.create({
                 openid: session.openid,
@@ -64,6 +71,7 @@ let WechatAuthService = class WechatAuthService {
         }
         const savedUser = await this.wxUserRepo.save(user);
         const token = this.authTokenService.sign(savedUser.id, savedUser.appid);
+        this.logger.log(`[wechat-login] completed action=${action} userId=${savedUser.id} openid=${this.maskValue(savedUser.openid, 6, 4)}`);
         return {
             success: true,
             token,
@@ -119,6 +127,15 @@ let WechatAuthService = class WechatAuthService {
     }
     safeString(value, maxLength) {
         return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+    }
+    maskValue(value, prefixLength, suffixLength) {
+        if (!value) {
+            return 'none';
+        }
+        if (value.length <= prefixLength + suffixLength) {
+            return value;
+        }
+        return `${value.slice(0, prefixLength)}...${value.slice(-suffixLength)}`;
     }
     async getWechatSession(code, appid, secret) {
         const url = new URL('https://api.weixin.qq.com/sns/jscode2session');
@@ -183,6 +200,7 @@ exports.WechatAuthService = WechatAuthService = __decorate([
     __param(1, (0, typeorm_1.InjectRepository)(wx_user_entity_1.WxUser)),
     __metadata("design:paramtypes", [config_1.ConfigService,
         typeorm_2.Repository,
-        auth_token_service_1.AuthTokenService])
+        auth_token_service_1.AuthTokenService,
+        logger_service_1.WinstonLoggerService])
 ], WechatAuthService);
 //# sourceMappingURL=wechat-auth.service.js.map

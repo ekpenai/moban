@@ -3,6 +3,7 @@ import { Repository } from 'typeorm';
 import { AuthTokenService } from './auth-token.service';
 import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
+import { WinstonLoggerService } from './logger.service';
 import { WxUser } from './wx-user.entity';
 type ClientWechatUser = {
     id: number;
@@ -21,7 +22,8 @@ export declare class WechatAuthService {
     private readonly configService;
     private readonly wxUserRepo;
     private readonly authTokenService;
-    constructor(configService: ConfigService, wxUserRepo: Repository<WxUser>, authTokenService: AuthTokenService);
+    private readonly logger;
+    constructor(configService: ConfigService, wxUserRepo: Repository<WxUser>, authTokenService: AuthTokenService, logger: WinstonLoggerService);
     login(body: WechatLoginDto): Promise<{
         success: true;
         token: string;
@@ -37,6 +39,7 @@ export declare class WechatAuthService {
     }>;
     private normalizeProfile;
     private safeString;
+    private maskValue;
     private getWechatSession;
     private toClientUser;
 }
