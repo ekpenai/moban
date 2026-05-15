@@ -420,6 +420,9 @@ export class AppController {
   @Post('render')
   async renderTemplate(@Body() body: RenderTemplateDto) {
     this.logger.log(`Received render request for template`);
+    if (!body?.template || !Array.isArray(body.template.layers)) {
+      throw new BadRequestException('template.layers is required');
+    }
     try {
       const enqueuePromise = this.renderQueue.add('render-job', {
         template: body.template,
@@ -433,22 +436,24 @@ export class AppController {
         removeOnFail: 500,
       });
 
-      // Avoid hanging forever when Redis is temporarily unreachable.
+      // Keep the submission endpoint fast for mobile clients.
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('enqueue_timeout')), 12000);
+        setTimeout(() => reject(new Error('enqueue_timeout')), 1800);
       });
 
       const job = await Promise.race([enqueuePromise, timeoutPromise]);
-      
-      const counts = await this.renderQueue.getJobCounts();
-      this.logger.log(`Job ${job.id} added successfully. Queue status: ${JSON.stringify(counts)}`);
-      return { jobId: job.id };
+
+      this.logger.log(`Job ${job.id} added successfully.`);
+      return {
+        jobId: String(job.id),
+        status: 'queued',
+      };
     } catch (err) {
       this.logger.error('Failed to add job to Redis', err.stack);
       if ((err as Error)?.message === 'enqueue_timeout') {
-        throw new ServiceUnavailableException('渲染队列暂时不可用，请稍后重试');
+        throw new ServiceUnavailableException('render queue unavailable');
       }
-      throw new ServiceUnavailableException('渲染任务提交失败，请稍后重试');
+      throw new ServiceUnavailableException('failed to submit render job');
     }
   }
 
@@ -456,14 +461,72 @@ export class AppController {
   async getRenderStatus(@Param('jobId') jobId: string) {
     const job = await this.renderQueue.getJob(jobId);
     if (!job) {
-      return { status: 'not_found' };
+      return {
+        jobId,
+        status: 'failed',
+        message: 'job not found or expired',
+      };
     }
+
     const state = await job.getState();
-    const result = job.returnvalue;
+    const progressValue = job.progress();
+    const progress =
+      typeof progressValue === 'number'
+        ? progressValue
+        : typeof progressValue === 'object' && typeof (progressValue as any)?.percent === 'number'
+          ? (progressValue as any).percent
+          : state === 'completed'
+            ? 100
+            : state === 'active'
+              ? 1
+              : 0;
+
+    if (state === 'completed') {
+      const returnValue = job.returnvalue;
+      let imageUrl = returnValue?.imageUrl || job.data?.uploadedImageUrl;
+      let imageBase64 = returnValue?.imageBase64;
+
+      if (!imageUrl && typeof returnValue === 'string' && returnValue.startsWith('data:image/')) {
+        imageBase64 = returnValue;
+      }
+
+      if (!imageUrl && imageBase64) {
+        imageUrl = await this.s3Service.uploadBase64(imageBase64, 'renders');
+        await job.update({
+          ...job.data,
+          uploadedImageUrl: imageUrl,
+        });
+      }
+
+      return {
+        jobId,
+        status: 'completed',
+        progress: 100,
+        imageUrl,
+        result: !imageUrl ? imageBase64 : undefined,
+      };
+    }
+
+    if (state === 'failed') {
+      return {
+        jobId,
+        status: 'failed',
+        progress,
+        message: String(job.failedReason || 'render failed'),
+      };
+    }
+
+    const normalizedStatus =
+      state === 'active'
+        ? 'processing'
+        : state === 'waiting' || state === 'delayed' || state === 'paused'
+          ? 'queued'
+          : state;
+
     return {
-      status: state,
-      result,
-      failedReason: state === 'failed' ? String(job.failedReason || '') : undefined,
+      jobId,
+      status: normalizedStatus,
+      progress,
     };
   }
 }

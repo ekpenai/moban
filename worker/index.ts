@@ -399,9 +399,11 @@ async function waitForImages(page: any): Promise<void> {
   });
 }
 
-async function renderImage(template: any): Promise<string> {
+async function renderImage(template: any, onProgress?: (progress: number) => Promise<void> | void): Promise<string> {
   const payload = normalizeRenderPayload(template);
+  await onProgress?.(10);
   const browser = await getBrowser();
+  await onProgress?.(20);
   const page = await browser.newPage();
   const width = Math.max(1, Math.round(payload.width));
   const height = Math.max(1, Math.round(payload.height));
@@ -418,19 +420,23 @@ async function renderImage(template: any): Promise<string> {
       height,
       deviceScaleFactor: 2,
     });
+    await onProgress?.(35);
 
     await page.setContent(buildPosterHtml(payload), {
       waitUntil: 'domcontentloaded',
     });
+    await onProgress?.(55);
 
     await waitForImages(page);
+    await onProgress?.(75);
 
     const outputBuffer = await page.screenshot({
       type: 'png',
       omitBackground: false,
     });
+    await onProgress?.(95);
 
-    return `data:image/png;base64,${outputBuffer.toString('base64')}`;
+    return `data:image/png;base64,${Buffer.from(outputBuffer).toString('base64')}`;
   } finally {
     await page.close();
   }
@@ -443,9 +449,15 @@ logger.info('[Worker] Connected to Redis. Registering render-job process handler
 worker.process('render-job', 2, async (job: Job) => {
   logger.info(`[Worker] Picked up job ${job.id} (Name: ${job.name}, Attempt: ${job.attemptsMade + 1})`);
   try {
-    const outputUrl = await renderImage(job.data.template);
-    logger.info(`[Worker] Completed job ${job.id}, outputLength=${outputUrl.length}`);
-    return outputUrl;
+    await job.progress(5);
+    const imageBase64 = await renderImage(job.data.template, async (progress) => {
+      await job.progress(progress);
+    });
+    await job.progress(100);
+    logger.info(`[Worker] Completed job ${job.id}, outputLength=${imageBase64.length}`);
+    return {
+      imageBase64,
+    };
   } catch (error) {
     logger.error(`[Worker] Error on job ${job.id}:`, error instanceof Error ? error.stack || error.message : String(error));
     throw error;
