@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Delete, UseGuards, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, diskStorage } from 'multer';
 import { InjectQueue } from '@nestjs/bull';
@@ -11,8 +11,12 @@ import { Template } from './template.entity';
 import { Setting } from './setting.entity';
 import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
+import { SaveDraftDto, SaveFavoriteDto } from './dto/user-data.dto';
 import { WinstonLoggerService } from './logger.service';
 import { WechatAuthService } from './wechat-auth.service';
+import { UserDataService } from './user-data.service';
+import { AuthGuard, type AuthenticatedRequestUser } from './auth.guard';
+import { CurrentUser } from './current-user.decorator';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Request } from 'express';
@@ -43,6 +47,7 @@ export class AppController {
     @InjectRepository(Setting) private settingRepo: Repository<Setting>,
     private readonly logger: WinstonLoggerService,
     private readonly wechatAuthService: WechatAuthService,
+    private readonly userDataService: UserDataService,
   ) {}
 
   private getPublicBaseUrl(req?: Request): string {
@@ -218,6 +223,42 @@ export class AppController {
   @Post('auth/wechat-login')
   async wechatLogin(@Body() body: WechatLoginDto) {
     return this.wechatAuthService.login(body);
+  }
+
+  @Get('me/favorites')
+  @UseGuards(AuthGuard)
+  async listFavorites(@CurrentUser() user: AuthenticatedRequestUser) {
+    return this.userDataService.listFavorites(user.userId);
+  }
+
+  @Post('me/favorites')
+  @UseGuards(AuthGuard)
+  async saveFavorite(@CurrentUser() user: AuthenticatedRequestUser, @Body() body: SaveFavoriteDto) {
+    return this.userDataService.saveFavorite(user.userId, body);
+  }
+
+  @Delete('me/favorites/:templateId')
+  @UseGuards(AuthGuard)
+  async deleteFavorite(@CurrentUser() user: AuthenticatedRequestUser, @Param('templateId') templateId: string) {
+    return this.userDataService.deleteFavorite(user.userId, templateId);
+  }
+
+  @Get('me/drafts')
+  @UseGuards(AuthGuard)
+  async listDrafts(@CurrentUser() user: AuthenticatedRequestUser) {
+    return this.userDataService.listDrafts(user.userId);
+  }
+
+  @Post('me/drafts')
+  @UseGuards(AuthGuard)
+  async saveDraft(@CurrentUser() user: AuthenticatedRequestUser, @Body() body: SaveDraftDto) {
+    return this.userDataService.saveDraft(user.userId, body);
+  }
+
+  @Delete('me/drafts/:id')
+  @UseGuards(AuthGuard)
+  async deleteDraft(@CurrentUser() user: AuthenticatedRequestUser, @Param('id') id: string) {
+    return this.userDataService.deleteDraft(user.userId, id);
   }
 
   @Get('settings/:key')

@@ -2,6 +2,7 @@ import { BadGatewayException, Injectable, InternalServerErrorException } from '@
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuthTokenService } from './auth-token.service';
 import { WechatLoginDto, WechatUserInfoDto } from './dto/wechat-login.dto';
 import { WxUser } from './wx-user.entity';
 
@@ -32,9 +33,10 @@ export class WechatAuthService {
   constructor(
     private readonly configService: ConfigService,
     @InjectRepository(WxUser) private readonly wxUserRepo: Repository<WxUser>,
+    private readonly authTokenService: AuthTokenService,
   ) {}
 
-  async login(body: WechatLoginDto): Promise<{ success: true; user: ClientWechatUser }> {
+  async login(body: WechatLoginDto): Promise<{ success: true; token: string; user: ClientWechatUser }> {
     const appid = this.configService.get<string>('WECHAT_APPID')?.trim();
     const secret = this.configService.get<string>('WECHAT_SECRET')?.trim();
 
@@ -73,9 +75,11 @@ export class WechatAuthService {
     }
 
     const savedUser = await this.wxUserRepo.save(user);
+    const token = this.authTokenService.sign(savedUser.id, savedUser.appid);
 
     return {
       success: true,
+      token,
       user: this.toClientUser(savedUser),
     };
   }

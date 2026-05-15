@@ -17,6 +17,10 @@ const template_entity_1 = require("./template.entity");
 const setting_entity_1 = require("./setting.entity");
 const wx_user_entity_1 = require("./wx-user.entity");
 const wechat_auth_service_1 = require("./wechat-auth.service");
+const user_favorite_entity_1 = require("./user-favorite.entity");
+const user_draft_entity_1 = require("./user-draft.entity");
+const user_data_service_1 = require("./user-data.service");
+const auth_token_service_1 = require("./auth-token.service");
 const serve_static_1 = require("@nestjs/serve-static");
 const config_1 = require("@nestjs/config");
 const schedule_1 = require("@nestjs/schedule");
@@ -75,15 +79,23 @@ exports.AppModule = AppModule = __decorate([
                     username: configService.get('DB_USER'),
                     password: configService.get('DB_PASS'),
                     database: configService.get('DB_NAME'),
-                    entities: [template_entity_1.Template, setting_entity_1.Setting, wx_user_entity_1.WxUser],
+                    entities: [template_entity_1.Template, setting_entity_1.Setting, wx_user_entity_1.WxUser, user_favorite_entity_1.UserFavorite, user_draft_entity_1.UserDraft],
                     synchronize: true,
                 }),
                 inject: [config_1.ConfigService],
             }),
-            typeorm_1.TypeOrmModule.forFeature([template_entity_1.Template, setting_entity_1.Setting, wx_user_entity_1.WxUser]),
+            typeorm_1.TypeOrmModule.forFeature([template_entity_1.Template, setting_entity_1.Setting, wx_user_entity_1.WxUser, user_favorite_entity_1.UserFavorite, user_draft_entity_1.UserDraft]),
         ],
         controllers: [app_controller_1.AppController],
-        providers: [psd_service_1.PsdService, logger_service_1.WinstonLoggerService, cleanup_service_1.CleanupService, s3_service_1.S3Service, wechat_auth_service_1.WechatAuthService],
+        providers: [
+            psd_service_1.PsdService,
+            logger_service_1.WinstonLoggerService,
+            cleanup_service_1.CleanupService,
+            s3_service_1.S3Service,
+            wechat_auth_service_1.WechatAuthService,
+            user_data_service_1.UserDataService,
+            auth_token_service_1.AuthTokenService,
+        ],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

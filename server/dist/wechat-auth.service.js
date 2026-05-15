@@ -17,13 +17,16 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
+const auth_token_service_1 = require("./auth-token.service");
 const wx_user_entity_1 = require("./wx-user.entity");
 let WechatAuthService = class WechatAuthService {
     configService;
     wxUserRepo;
-    constructor(configService, wxUserRepo) {
+    authTokenService;
+    constructor(configService, wxUserRepo, authTokenService) {
         this.configService = configService;
         this.wxUserRepo = wxUserRepo;
+        this.authTokenService = authTokenService;
     }
     async login(body) {
         const appid = this.configService.get('WECHAT_APPID')?.trim();
@@ -60,8 +63,10 @@ let WechatAuthService = class WechatAuthService {
             user.lastLoginAt = now;
         }
         const savedUser = await this.wxUserRepo.save(user);
+        const token = this.authTokenService.sign(savedUser.id, savedUser.appid);
         return {
             success: true,
+            token,
             user: this.toClientUser(savedUser),
         };
     }
@@ -139,6 +144,7 @@ exports.WechatAuthService = WechatAuthService = __decorate([
     (0, common_1.Injectable)(),
     __param(1, (0, typeorm_1.InjectRepository)(wx_user_entity_1.WxUser)),
     __metadata("design:paramtypes", [config_1.ConfigService,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        auth_token_service_1.AuthTokenService])
 ], WechatAuthService);
 //# sourceMappingURL=wechat-auth.service.js.map

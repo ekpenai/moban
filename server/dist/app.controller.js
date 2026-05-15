@@ -58,8 +58,12 @@ const template_entity_1 = require("./template.entity");
 const setting_entity_1 = require("./setting.entity");
 const template_dto_1 = require("./dto/template.dto");
 const wechat_login_dto_1 = require("./dto/wechat-login.dto");
+const user_data_dto_1 = require("./dto/user-data.dto");
 const logger_service_1 = require("./logger.service");
 const wechat_auth_service_1 = require("./wechat-auth.service");
+const user_data_service_1 = require("./user-data.service");
+const auth_guard_1 = require("./auth.guard");
+const current_user_decorator_1 = require("./current-user.decorator");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 function parseSizeToBytes(input, fallbackBytes) {
@@ -85,7 +89,8 @@ let AppController = class AppController {
     settingRepo;
     logger;
     wechatAuthService;
-    constructor(psdService, s3Service, renderQueue, templateRepo, settingRepo, logger, wechatAuthService) {
+    userDataService;
+    constructor(psdService, s3Service, renderQueue, templateRepo, settingRepo, logger, wechatAuthService, userDataService) {
         this.psdService = psdService;
         this.s3Service = s3Service;
         this.renderQueue = renderQueue;
@@ -93,6 +98,7 @@ let AppController = class AppController {
         this.settingRepo = settingRepo;
         this.logger = logger;
         this.wechatAuthService = wechatAuthService;
+        this.userDataService = userDataService;
     }
     getPublicBaseUrl(req) {
         const envBase = (process.env.PUBLIC_BASE_URL || '').trim();
@@ -238,6 +244,24 @@ let AppController = class AppController {
     }
     async wechatLogin(body) {
         return this.wechatAuthService.login(body);
+    }
+    async listFavorites(user) {
+        return this.userDataService.listFavorites(user.userId);
+    }
+    async saveFavorite(user, body) {
+        return this.userDataService.saveFavorite(user.userId, body);
+    }
+    async deleteFavorite(user, templateId) {
+        return this.userDataService.deleteFavorite(user.userId, templateId);
+    }
+    async listDrafts(user) {
+        return this.userDataService.listDrafts(user.userId);
+    }
+    async saveDraft(user, body) {
+        return this.userDataService.saveDraft(user.userId, body);
+    }
+    async deleteDraft(user, id) {
+        return this.userDataService.deleteDraft(user.userId, id);
     }
     async getSetting(key) {
         const setting = await this.settingRepo.findOne({ where: { key } });
@@ -443,6 +467,58 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "wechatLogin", null);
 __decorate([
+    (0, common_1.Get)('me/favorites'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "listFavorites", null);
+__decorate([
+    (0, common_1.Post)('me/favorites'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, user_data_dto_1.SaveFavoriteDto]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "saveFavorite", null);
+__decorate([
+    (0, common_1.Delete)('me/favorites/:templateId'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('templateId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "deleteFavorite", null);
+__decorate([
+    (0, common_1.Get)('me/drafts'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "listDrafts", null);
+__decorate([
+    (0, common_1.Post)('me/drafts'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, user_data_dto_1.SaveDraftDto]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "saveDraft", null);
+__decorate([
+    (0, common_1.Delete)('me/drafts/:id'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "deleteDraft", null);
+__decorate([
     (0, common_1.Get)('settings/:key'),
     __param(0, (0, common_1.Param)('key')),
     __metadata("design:type", Function),
@@ -525,6 +601,7 @@ exports.AppController = AppController = __decorate([
         s3_service_1.S3Service, Object, typeorm_2.Repository,
         typeorm_2.Repository,
         logger_service_1.WinstonLoggerService,
-        wechat_auth_service_1.WechatAuthService])
+        wechat_auth_service_1.WechatAuthService,
+        user_data_service_1.UserDataService])
 ], AppController);
 //# sourceMappingURL=app.controller.js.map

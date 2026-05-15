@@ -8,6 +8,10 @@ import { Template } from './template.entity';
 import { Setting } from './setting.entity';
 import { WxUser } from './wx-user.entity';
 import { WechatAuthService } from './wechat-auth.service';
+import { UserFavorite } from './user-favorite.entity';
+import { UserDraft } from './user-draft.entity';
+import { UserDataService } from './user-data.service';
+import { AuthTokenService } from './auth-token.service';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -69,14 +73,22 @@ import { join } from 'path';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        entities: [Template, Setting, WxUser],
+        entities: [Template, Setting, WxUser, UserFavorite, UserDraft],
         synchronize: true,
       }),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([Template, Setting, WxUser]),
+    TypeOrmModule.forFeature([Template, Setting, WxUser, UserFavorite, UserDraft]),
   ],
   controllers: [AppController],
-  providers: [PsdService, WinstonLoggerService, CleanupService, S3Service, WechatAuthService],
+  providers: [
+    PsdService,
+    WinstonLoggerService,
+    CleanupService,
+    S3Service,
+    WechatAuthService,
+    UserDataService,
+    AuthTokenService,
+  ],
 })
 export class AppModule { }

@@ -6,8 +6,11 @@ import { Template } from './template.entity';
 import { Setting } from './setting.entity';
 import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
+import { SaveDraftDto, SaveFavoriteDto } from './dto/user-data.dto';
 import { WinstonLoggerService } from './logger.service';
 import { WechatAuthService } from './wechat-auth.service';
+import { UserDataService } from './user-data.service';
+import { type AuthenticatedRequestUser } from './auth.guard';
 import type { Request } from 'express';
 export declare class AppController {
     private readonly psdService;
@@ -17,7 +20,8 @@ export declare class AppController {
     private settingRepo;
     private readonly logger;
     private readonly wechatAuthService;
-    constructor(psdService: PsdService, s3Service: S3Service, renderQueue: Queue, templateRepo: Repository<Template>, settingRepo: Repository<Setting>, logger: WinstonLoggerService, wechatAuthService: WechatAuthService);
+    private readonly userDataService;
+    constructor(psdService: PsdService, s3Service: S3Service, renderQueue: Queue, templateRepo: Repository<Template>, settingRepo: Repository<Setting>, logger: WinstonLoggerService, wechatAuthService: WechatAuthService, userDataService: UserDataService);
     private getPublicBaseUrl;
     private toPublicUploadUrl;
     private normalizeUploadUrl;
@@ -41,6 +45,7 @@ export declare class AppController {
     }>;
     wechatLogin(body: WechatLoginDto): Promise<{
         success: true;
+        token: string;
         user: {
             id: number;
             nickName: string;
@@ -54,6 +59,58 @@ export declare class AppController {
             updatedAt: Date;
             lastLoginAt: Date | null;
         };
+    }>;
+    listFavorites(user: AuthenticatedRequestUser): Promise<{
+        success: boolean;
+        items: {
+            id: number;
+            templateId: string;
+            title: string;
+            image: string;
+            createdAt: Date;
+        }[];
+    }>;
+    saveFavorite(user: AuthenticatedRequestUser, body: SaveFavoriteDto): Promise<{
+        success: boolean;
+        item: {
+            id: number;
+            templateId: string;
+            title: string;
+            image: string;
+            createdAt: Date;
+        };
+    }>;
+    deleteFavorite(user: AuthenticatedRequestUser, templateId: string): Promise<{
+        success: boolean;
+    }>;
+    listDrafts(user: AuthenticatedRequestUser): Promise<{
+        success: boolean;
+        items: {
+            id: string;
+            templateId: string;
+            coverImage: string;
+            templateWidth: number;
+            templateHeight: number;
+            elements: any;
+            createdAt: Date;
+            updatedAt: Date;
+        }[];
+    }>;
+    saveDraft(user: AuthenticatedRequestUser, body: SaveDraftDto): Promise<{
+        success: boolean;
+        item: {
+            id: string;
+            templateId: string;
+            coverImage: string;
+            templateWidth: number;
+            templateHeight: number;
+            elements: any;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    deleteDraft(user: AuthenticatedRequestUser, id: string): Promise<{
+        success: boolean;
     }>;
     getSetting(key: string): Promise<{
         data: any;
