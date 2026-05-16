@@ -13,11 +13,13 @@ import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/templ
 import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
 import { SaveDraftDto, SaveFavoriteDto } from './dto/user-data.dto';
+import { ArabicReshapeDto } from './dto/arabic-reshape.dto';
 import { WinstonLoggerService } from './logger.service';
 import { WechatAuthService } from './wechat-auth.service';
 import { UserDataService } from './user-data.service';
 import { AuthGuard, type AuthenticatedRequestUser } from './auth.guard';
 import { CurrentUser } from './current-user.decorator';
+import { ArabicReshapeService } from './arabic-reshape.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Request } from 'express';
@@ -49,6 +51,7 @@ export class AppController {
     private readonly logger: WinstonLoggerService,
     private readonly wechatAuthService: WechatAuthService,
     private readonly userDataService: UserDataService,
+    private readonly arabicReshapeService: ArabicReshapeService,
   ) {}
 
   private getPublicBaseUrl(req?: Request): string {
@@ -224,6 +227,11 @@ export class AppController {
   @Post('auth/wechat-login')
   async wechatLogin(@Body() body: WechatLoginDto) {
     return this.wechatAuthService.login(body);
+  }
+
+  @Post('api/arabic/reshape')
+  async reshapeArabic(@Body() body: ArabicReshapeDto) {
+    return this.arabicReshapeService.reshapeText(body.text, body.mode);
   }
 
   @Get('me/profile')

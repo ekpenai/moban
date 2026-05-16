@@ -12,6 +12,7 @@ import { UserFavorite } from './user-favorite.entity';
 import { UserDraft } from './user-draft.entity';
 import { UserDataService } from './user-data.service';
 import { AuthTokenService } from './auth-token.service';
+import { ArabicReshapeService } from './arabic-reshape.service';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -89,6 +90,7 @@ import { join } from 'path';
     WechatAuthService,
     UserDataService,
     AuthTokenService,
+    ArabicReshapeService,
   ],
 })
 export class AppModule { }
