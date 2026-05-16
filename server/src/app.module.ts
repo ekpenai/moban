@@ -13,6 +13,9 @@ import { UserDraft } from './user-draft.entity';
 import { UserDataService } from './user-data.service';
 import { AuthTokenService } from './auth-token.service';
 import { ArabicReshapeService } from './arabic-reshape.service';
+import { RenderJobEntity } from './render-job.entity';
+import { RenderJobLogEntity } from './render-job-log.entity';
+import { RenderJobService } from './render-job.service';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -74,12 +77,12 @@ import { join } from 'path';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        entities: [Template, Setting, WxUser, UserFavorite, UserDraft],
+        entities: [Template, Setting, WxUser, UserFavorite, UserDraft, RenderJobEntity, RenderJobLogEntity],
         synchronize: true,
       }),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([Template, Setting, WxUser, UserFavorite, UserDraft]),
+    TypeOrmModule.forFeature([Template, Setting, WxUser, UserFavorite, UserDraft, RenderJobEntity, RenderJobLogEntity]),
   ],
   controllers: [AppController],
   providers: [
@@ -91,6 +94,7 @@ import { join } from 'path';
     UserDataService,
     AuthTokenService,
     ArabicReshapeService,
+    RenderJobService,
   ],
 })
 export class AppModule { }

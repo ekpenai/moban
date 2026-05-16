@@ -84,6 +84,8 @@ type RenderResult = {
   imageBase64?: string;
 };
 
+const SERVER_BASE_URL = (process.env.SERVER_BASE_URL || process.env.PUBLIC_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+
 let browserPromise: Promise<Browser> | null = null;
 let s3Client: S3Client | null = null;
 
@@ -466,6 +468,51 @@ async function renderImage(template: any, onProgress?: (progress: number) => Pro
   }
 }
 
+async function notifyServer(job: Job, payload: {
+  status?: string;
+  stage: string;
+  progress: number;
+  message: string;
+  level?: 'info' | 'warn' | 'error';
+  imageUrl?: string | null;
+  failedReason?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  meta?: Record<string, unknown>;
+}) {
+  const userId = job.data?.userId;
+  const token = process.env.WORKER_INTERNAL_TOKEN || '';
+  if (!userId || !SERVER_BASE_URL) return;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  try {
+    await axios.post(`${SERVER_BASE_URL}/internal/render-jobs/${job.id}/events`, {
+      userId,
+      status: payload.status,
+      stage: payload.stage,
+      progress: payload.progress,
+      message: payload.message,
+      level: payload.level || 'info',
+      imageUrl: payload.imageUrl,
+      failedReason: payload.failedReason,
+      startedAt: payload.startedAt,
+      completedAt: payload.completedAt,
+      meta: payload.meta || null,
+    }, {
+      headers,
+      timeout: 10000,
+    });
+  } catch (error) {
+    logger.warn(`[Worker] Failed to notify server for job ${job.id}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function getS3Client(): S3Client {
   if (!s3Client) {
     s3Client = new S3Client({
@@ -510,23 +557,76 @@ logger.info('[Worker] Connected to Redis. Registering render-job process handler
 
 worker.process('render-job', 2, async (job: Job) => {
   logger.info(`[Worker] Picked up job ${job.id} (Name: ${job.name}, Attempt: ${job.attemptsMade + 1})`);
+  const startedAt = new Date().toISOString();
   try {
     await job.progress(5);
+    await notifyServer(job, {
+      status: 'processing',
+      stage: 'booting_browser',
+      progress: 5,
+      message: 'Worker picked up render job',
+      startedAt,
+    });
+
+    await notifyServer(job, {
+      status: 'processing',
+      stage: 'normalizing_template',
+      progress: 10,
+      message: 'Normalizing template payload',
+    });
+
     const outputBuffer = await renderImage(job.data.template, async (progress) => {
       await job.progress(progress);
+      const stage =
+        progress >= 95 ? 'capturing_image'
+          : progress >= 75 ? 'loading_assets'
+            : progress >= 55 ? 'rendering_html'
+              : progress >= 35 ? 'booting_browser'
+                : 'normalizing_template';
+      await notifyServer(job, {
+        status: 'processing',
+        stage,
+        progress,
+        message: `Render progress ${progress}%`,
+      });
     });
     await job.progress(96);
+    await notifyServer(job, {
+      status: 'processing',
+      stage: 'uploading_result',
+      progress: 96,
+      message: 'Uploading rendered image to object storage',
+    });
     const imageUrl = await uploadRenderBuffer(outputBuffer);
     await job.progress(100);
     logger.info(
       `[Worker] Completed job ${job.id}, outputLength=${outputBuffer.length}, uploaded=${imageUrl ? 'yes' : 'no'}`,
     );
+    const completedAt = new Date().toISOString();
+    await notifyServer(job, {
+      status: 'completed',
+      stage: 'completed',
+      progress: 100,
+      message: 'Render job completed successfully',
+      imageUrl,
+      completedAt,
+      meta: { outputLength: outputBuffer.length },
+    });
     const result: RenderResult = imageUrl
       ? { imageUrl }
       : { imageBase64: `data:image/png;base64,${outputBuffer.toString('base64')}` };
     return result;
   } catch (error) {
     logger.error(`[Worker] Error on job ${job.id}:`, error instanceof Error ? error.stack || error.message : String(error));
+    await notifyServer(job, {
+      status: 'failed',
+      stage: 'failed',
+      progress: 100,
+      message: error instanceof Error ? error.message : 'render failed',
+      level: 'error',
+      failedReason: error instanceof Error ? error.message : 'render failed',
+      completedAt: new Date().toISOString(),
+    });
     throw error;
   }
 });

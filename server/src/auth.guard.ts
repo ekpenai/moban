@@ -18,9 +18,12 @@ export class AuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const authorization = request.headers.authorization || '';
-    const [scheme, token] = authorization.split(' ');
+    const [scheme, bearerToken] = authorization.split(' ');
+    const queryToken =
+      typeof request.query?.token === 'string' ? request.query.token.trim() : '';
+    const token = scheme === 'Bearer' && bearerToken ? bearerToken : queryToken;
 
-    if (scheme !== 'Bearer' || !token) {
+    if (!token) {
       throw new UnauthorizedException({ success: false, message: '未登录' });
     }
 

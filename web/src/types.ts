@@ -50,3 +50,29 @@ export interface TemplateData {
   height: number;
   layers: TemplateLayer[];
 }
+
+export interface RenderJobLogEntry {
+  id: string;
+  time: string | null;
+  stage: string;
+  level: string;
+  message: string;
+  meta?: Record<string, unknown> | null;
+}
+
+export interface RenderJobSummary {
+  jobId: string;
+  source: string;
+  status: string;
+  stage: string;
+  progress: number;
+  message?: string;
+  imageUrl?: string;
+  failedReason?: string;
+  createdAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  durationMs?: number | null;
+  recentLogs?: RenderJobLogEntry[];
+}

@@ -11,6 +11,7 @@ import {
 import { CropModal } from './components/CropModal';
 import { SaveModal } from './components/SaveModal';
 import { SettingsModal } from './components/SettingsModal';
+import { RenderJobsPanel } from './components/RenderJobsPanel';
 import type { TemplateData } from './types';
 import api from './lib/axios';
 import toast from 'react-hot-toast';
@@ -48,6 +49,8 @@ function App() {
   const [isManageMode, setIsManageMode] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isJobsPanelOpen, setIsJobsPanelOpen] = useState(false);
+  const [activeRenderJobId, setActiveRenderJobId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState('全部');
 
@@ -228,6 +231,8 @@ function App() {
     try {
       const res = await api.post('/render', { template });
       const jobId = res.data.jobId;
+      setActiveRenderJobId(jobId);
+      setIsJobsPanelOpen(true);
 
       poll = setInterval(async () => {
         attempts += 1;
@@ -237,20 +242,22 @@ function App() {
         }
         try {
           const statusRes = await api.get(`/render/${jobId}`);
-          const { status, result, failedReason } = statusRes.data;
+          const { status, result, imageUrl, message, failedReason } = statusRes.data;
+          const finalImage = imageUrl || result;
 
-          if (status === 'completed' && result) {
+          if (status === 'completed' && finalImage) {
             if (poll) clearInterval(poll);
-            setRenderResult(result);
+            setRenderResult(finalImage);
             setIsRendering(false);
             toast.success('导出完成', { id: tid });
-            postToMiniProgram('renderSuccess', { result });
+            postToMiniProgram('renderSuccess', { result: finalImage });
             return;
           }
 
           if (status === 'failed') {
-            postToMiniProgram('renderFail', { reason: failedReason || 'failed' });
-            finishError(failedReason ? `导出失败：${failedReason}` : '导出失败，请查看服务端或 Worker 日志');
+            const failedMsg = failedReason || message || 'failed';
+            postToMiniProgram('renderFail', { reason: failedMsg });
+            finishError(failedReason || message ? `导出失败：${failedMsg}` : '导出失败，请查看服务端或 Worker 日志');
             return;
           }
 
@@ -375,15 +382,25 @@ function App() {
 
         <div className="h-4 w-[1px] bg-slate-200 hidden sm:block" />
 
-        <button 
-          onClick={handleRender}
-          disabled={!template || isRendering}
-          className="h-8 flex items-center gap-1 sm:gap-2 px-3 sm:px-5 bg-indigo-600 text-white rounded-full text-[11px] sm:text-xs font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-30"
-        >
-          {isRendering ? <Loader2 size={14} className="animate-spin" /> : <DownloadCloud size={14} />}
-          <span className="hidden sm:inline">导出设计</span>
-          <span className="sm:hidden">导出</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsJobsPanelOpen(true)}
+            className="h-8 flex items-center gap-1 sm:gap-2 px-3 sm:px-4 bg-slate-100 text-slate-700 rounded-full text-[11px] sm:text-xs font-bold hover:bg-slate-200 active:scale-95 transition-all"
+          >
+            <PanelLeftOpen size={14} />
+            <span className="hidden sm:inline">导出任务</span>
+            <span className="sm:hidden">任务</span>
+          </button>
+          <button 
+            onClick={handleRender}
+            disabled={!template || isRendering}
+            className="h-8 flex items-center gap-1 sm:gap-2 px-3 sm:px-5 bg-indigo-600 text-white rounded-full text-[11px] sm:text-xs font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-30"
+          >
+            {isRendering ? <Loader2 size={14} className="animate-spin" /> : <DownloadCloud size={14} />}
+            <span className="hidden sm:inline">导出设计</span>
+            <span className="sm:hidden">导出</span>
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden pt-16 sm:pt-20 relative">
@@ -770,6 +787,12 @@ function App() {
       {isSettingsModalOpen && (
         <SettingsModal onClose={() => setIsSettingsModalOpen(false)} />
       )}
+
+      <RenderJobsPanel
+        isOpen={isJobsPanelOpen}
+        onClose={() => setIsJobsPanelOpen(false)}
+        highlightedJobId={activeRenderJobId}
+      />
     </div>
   );
 }

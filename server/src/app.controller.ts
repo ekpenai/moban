@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, UseGuards, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Delete, UseGuards, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException, Res, UnauthorizedException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, diskStorage } from 'multer';
 import { InjectQueue } from '@nestjs/bull';
@@ -14,15 +14,18 @@ import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
 import { SaveDraftDto, SaveFavoriteDto } from './dto/user-data.dto';
 import { ArabicReshapeDto } from './dto/arabic-reshape.dto';
+import { CreateRenderEventDto, ListRenderJobsDto } from './dto/render-job.dto';
 import { WinstonLoggerService } from './logger.service';
 import { WechatAuthService } from './wechat-auth.service';
 import { UserDataService } from './user-data.service';
 import { AuthGuard, type AuthenticatedRequestUser } from './auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import { ArabicReshapeService } from './arabic-reshape.service';
+import { RenderJobService } from './render-job.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Request } from 'express';
+import type { Response } from 'express';
 
 function parseSizeToBytes(input: string | undefined, fallbackBytes: number): number {
   if (!input) return fallbackBytes;
@@ -52,6 +55,7 @@ export class AppController {
     private readonly wechatAuthService: WechatAuthService,
     private readonly userDataService: UserDataService,
     private readonly arabicReshapeService: ArabicReshapeService,
+    private readonly renderJobService: RenderJobService,
   ) {}
 
   private getPublicBaseUrl(req?: Request): string {
@@ -426,14 +430,22 @@ export class AppController {
   }
 
   @Post('render')
-  async renderTemplate(@Body() body: RenderTemplateDto) {
+  @UseGuards(AuthGuard)
+  async renderTemplate(@CurrentUser() user: AuthenticatedRequestUser, @Body() body: RenderTemplateDto, @Req() req: Request) {
     this.logger.log(`Received render request for template`);
     if (!body?.template || !Array.isArray(body.template.layers)) {
       throw new BadRequestException('template.layers is required');
     }
     try {
+      const sourceHeader = String(req.headers['x-render-source'] || '').trim().toLowerCase();
+      const userAgent = String(req.headers['user-agent'] || '').toLowerCase();
+      const source = sourceHeader === 'mini_program' || userAgent.includes('miniprogram') || userAgent.includes('micromessenger')
+        ? 'mini_program'
+        : 'web';
       const enqueuePromise = this.renderQueue.add('render-job', {
         template: body.template,
+        userId: user.userId,
+        source,
       }, {
         attempts: 3,
         backoff: {
@@ -466,13 +478,19 @@ export class AppController {
   }
 
   @Get('render/:jobId')
-  async getRenderStatus(@Param('jobId') jobId: string) {
+  @UseGuards(AuthGuard)
+  async getRenderStatus(@CurrentUser() user: AuthenticatedRequestUser, @Param('jobId') jobId: string) {
+    const ownedJob = await this.renderJobService.getJobForUser(jobId, user.userId);
     const job = await this.renderQueue.getJob(jobId);
     if (!job) {
       return {
         jobId,
         status: 'failed',
-        message: 'job not found or expired',
+        stage: ownedJob.stage || 'failed',
+        progress: ownedJob.progress || 0,
+        message: ownedJob.failedReason || ownedJob.message || 'job not found or expired',
+        updatedAt: ownedJob.updatedAt?.toISOString?.() || null,
+        durationMs: ownedJob.startedAt ? Math.max(0, (ownedJob.completedAt || ownedJob.updatedAt).getTime() - ownedJob.startedAt.getTime()) : null,
       };
     }
 
@@ -498,21 +516,32 @@ export class AppController {
         imageBase64 = returnValue;
       }
 
+      const detail = await this.renderJobService.getJobDetailForUser(jobId, user.userId);
       return {
         jobId,
         status: 'completed',
         progress: 100,
+        stage: detail.stage || 'completed',
+        message: detail.message,
         imageUrl,
         result: !imageUrl ? imageBase64 : undefined,
+        updatedAt: detail.updatedAt,
+        durationMs: detail.durationMs,
+        recentLogs: detail.recentLogs,
       };
     }
 
     if (state === 'failed') {
+      const detail = await this.renderJobService.getJobDetailForUser(jobId, user.userId);
       return {
         jobId,
         status: 'failed',
         progress,
-        message: String(job.failedReason || 'render failed'),
+        stage: detail.stage || 'failed',
+        message: detail.failedReason || detail.message || String(job.failedReason || 'render failed'),
+        updatedAt: detail.updatedAt,
+        durationMs: detail.durationMs,
+        recentLogs: detail.recentLogs,
       };
     }
 
@@ -523,10 +552,114 @@ export class AppController {
           ? 'queued'
           : state;
 
+    const detail = await this.renderJobService.getJobDetailForUser(jobId, user.userId);
     return {
       jobId,
       status: normalizedStatus,
       progress,
+      stage: detail.stage || normalizedStatus,
+      message: detail.message,
+      updatedAt: detail.updatedAt,
+      durationMs: detail.durationMs,
+      recentLogs: detail.recentLogs,
     };
   }
+
+  @Get('me/render-jobs')
+  @UseGuards(AuthGuard)
+  async listRenderJobs(@CurrentUser() user: AuthenticatedRequestUser, @Req() req: Request) {
+    const query = req.query as unknown as ListRenderJobsDto;
+    return {
+      success: true,
+      data: await this.renderJobService.listJobsForUser(user.userId, query),
+    };
+  }
+
+  @Get('me/render-jobs/:jobId')
+  @UseGuards(AuthGuard)
+  async getRenderJobDetail(@CurrentUser() user: AuthenticatedRequestUser, @Param('jobId') jobId: string) {
+    return {
+      success: true,
+      data: await this.renderJobService.getJobDetailForUser(jobId, user.userId),
+    };
+  }
+
+  @Get('me/render-jobs/:jobId/logs')
+  @UseGuards(AuthGuard)
+  async getRenderJobLogs(@CurrentUser() user: AuthenticatedRequestUser, @Param('jobId') jobId: string) {
+    return {
+      success: true,
+      data: await this.renderJobService.getJobLogsForUser(jobId, user.userId),
+    };
+  }
+
+  @Get('me/render-jobs/:jobId/stream')
+  @UseGuards(AuthGuard)
+  async streamRenderJob(
+    @CurrentUser() user: AuthenticatedRequestUser,
+    @Param('jobId') jobId: string,
+    @Res() res: Response,
+  ) {
+    await this.renderJobService.getJobForUser(jobId, user.userId);
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const writeEvent = (event: string, payload: unknown) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    writeEvent('snapshot', await this.renderJobService.getJobDetailForUser(jobId, user.userId));
+    writeEvent('logs', await this.renderJobService.getJobLogsForUser(jobId, user.userId));
+
+    const unsubscribe = this.renderJobService.subscribe(jobId, (event) => {
+      writeEvent(event.type, event.payload);
+    });
+
+    const heartbeat = setInterval(() => {
+      res.write(': ping\n\n');
+    }, 15000);
+
+    res.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+      res.end();
+    });
+  }
+
+  @Post('internal/render-jobs/:jobId/events')
+  async recordRenderJobEvent(@Param('jobId') jobId: string, @Body() body: CreateRenderEventDto, @Req() req: Request) {
+    const internalToken = (process.env.WORKER_INTERNAL_TOKEN || '').trim();
+    if (internalToken) {
+      const authorization = String(req.headers.authorization || '');
+      const expected = `Bearer ${internalToken}`;
+      if (authorization !== expected) {
+        throw new UnauthorizedException({ success: false, message: 'invalid worker token' });
+      }
+    }
+
+    await this.renderJobService.recordEvent({
+      jobId,
+      userId: body.userId,
+      status: body.status,
+      stage: body.stage,
+      progress: typeof body.progress === 'number' ? body.progress : undefined,
+      message: body.message,
+      level: body.level,
+      imageUrl: body.imageUrl,
+      failedReason: body.failedReason,
+      startedAt: body.startedAt,
+      completedAt: body.completedAt,
+      meta: body.meta,
+    });
+
+    return { success: true };
+  }
 }
+
+
+
+
