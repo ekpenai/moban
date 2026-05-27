@@ -77,6 +77,16 @@ type RenderPayload = {
   backgroundImage?: string;
   texts?: PosterTextItem[];
   images?: PosterImageItem[];
+  fonts?: PosterFontItem[];
+};
+
+type PosterFontItem = {
+  label?: string;
+  family?: string;
+  source?: string;
+  url?: string;
+  fileUrl?: string;
+  fontUrl?: string;
 };
 
 type RenderResult = {
@@ -122,6 +132,7 @@ function normalizeRenderPayload(template: any): RenderPayload {
       backgroundImage: template.backgroundImage,
       texts: Array.isArray(template.texts) ? template.texts : [],
       images: Array.isArray(template.images) ? template.images : [],
+      fonts: normalizeFontItems(template.fonts),
     };
   }
 
@@ -180,10 +191,27 @@ function normalizeRenderPayload(template: any): RenderPayload {
     backgroundImage,
     texts,
     images,
+    fonts: normalizeFontItems(template?.fonts),
   };
 }
 
-function discoverFontFaces(): string {
+function normalizeFontItems(fonts: unknown): PosterFontItem[] {
+  if (!Array.isArray(fonts)) return [];
+  return fonts
+    .map((font: any) => {
+      const family = String(font?.family || font?.fontFamily || '').trim();
+      const source = normalizeAssetUrl(String(font?.source || font?.url || font?.fileUrl || font?.fontUrl || '').trim());
+      if (!family || !source) return null;
+      return {
+        label: String(font?.label || font?.name || family),
+        family,
+        source,
+      };
+    })
+    .filter(Boolean) as PosterFontItem[];
+}
+
+function discoverFontFaces(fonts: PosterFontItem[] = []): string {
   const fontDirs = [
     path.join(__dirname, 'fonts'),
     path.join(__dirname, '..', 'fonts'),
@@ -200,12 +228,22 @@ function discoverFontFaces(): string {
     }
   }
 
-  if (fontFiles.length === 0) {
+  const remoteFontFaces = fonts
+    .filter((font) => font.family && font.source)
+    .map((font) => `
+        @font-face {
+          font-family: "${escapeHtml(String(font.family))}";
+          src: url("${escapeHtml(normalizeAssetUrl(String(font.source)))}");
+          font-display: block;
+        }
+      `);
+
+  if (fontFiles.length === 0 && remoteFontFaces.length === 0) {
     logger.warn('[Poster] No custom fonts found under worker/fonts or fonts. Falling back to installed fonts.');
     return '';
   }
 
-  return fontFiles
+  const localFontFaces = fontFiles
     .map((filePath) => {
       const family = path.basename(filePath).replace(/\.(ttf|otf|woff2?)$/i, '');
       const fileUrl = `file://${filePath.replace(/\\/g, '/')}`;
@@ -218,12 +256,14 @@ function discoverFontFaces(): string {
       `;
     })
     .join('\n');
+
+  return [...remoteFontFaces, localFontFaces].join('\n');
 }
 
 function buildPosterHtml(payload: RenderPayload): string {
   const width = Math.max(1, Math.round(payload.width));
   const height = Math.max(1, Math.round(payload.height));
-  const fontFaces = discoverFontFaces();
+  const fontFaces = discoverFontFaces(payload.fonts || []);
 
   const backgroundHtml = payload.backgroundImage
     ? `<img class="poster-bg" src="${escapeHtml(normalizeAssetUrl(payload.backgroundImage))}" alt="" />`
@@ -362,7 +402,7 @@ function buildPosterHtml(payload: RenderPayload): string {
             white-space: pre-wrap;
             word-break: break-word;
             overflow-wrap: anywhere;
-            unicode-bidi: plaintext;
+            unicode-bidi: isolate;
             transform-origin: center center;
           }
         </style>
