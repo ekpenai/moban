@@ -42,6 +42,7 @@ function parseSizeToBytes(input: string | undefined, fallbackBytes: number): num
 }
 
 const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
+const ALLOWED_FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.woff', '.woff2']);
 
 @Controller()
 export class AppController {
@@ -226,6 +227,25 @@ export class AppController {
     if (!file) throw new BadRequestException('No file uploaded');
     const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'sys-images');
     return { url };
+  }
+
+  @Post('upload/sys-font')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  async uploadSysFont(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file uploaded');
+
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ALLOWED_FONT_EXTENSIONS.has(ext)) {
+      throw new BadRequestException('Only ttf, otf, woff, woff2 font files are supported');
+    }
+
+    const mimeType = file.mimetype || 'font/ttf';
+    const url = await this.s3Service.uploadFile(file.buffer, file.originalname, mimeType, 'fonts');
+    return {
+      url,
+      name: path.basename(file.originalname, ext),
+      ext,
+    };
   }
 
   @Post('auth/wechat-login')
