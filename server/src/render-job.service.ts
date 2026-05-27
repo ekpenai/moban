@@ -49,6 +49,9 @@ export class RenderJobService {
     progress: number;
     message: string;
   }) {
+    const existing = await this.renderJobRepo.findOne({ where: { jobId: input.jobId } });
+    if (existing) return existing;
+
     const entity = this.renderJobRepo.create({
       jobId: input.jobId,
       userId: input.userId,
@@ -136,6 +139,19 @@ export class RenderJobService {
   }) {
     const startedAt = input.startedAt ? new Date(input.startedAt) : undefined;
     const completedAt = input.completedAt ? new Date(input.completedAt) : undefined;
+
+    let existing = await this.renderJobRepo.findOne({ where: { jobId: input.jobId } });
+    if (!existing) {
+      existing = await this.createJob({
+        jobId: input.jobId,
+        userId: input.userId,
+        source: 'worker',
+        status: input.status || 'processing',
+        stage: input.stage,
+        progress: input.progress || 0,
+        message: input.message,
+      });
+    }
 
     await this.updateJob(input.jobId, {
       status: input.status,

@@ -483,6 +483,16 @@ export class AppController {
 
       const job = await Promise.race([enqueuePromise, timeoutPromise]);
 
+      await this.renderJobService.createJob({
+        jobId: String(job.id),
+        userId: user.userId,
+        source,
+        status: 'queued',
+        stage: 'queued',
+        progress: 0,
+        message: 'Render job queued',
+      });
+
       this.logger.log(`Job ${job.id} added successfully.`);
       return {
         jobId: String(job.id),
