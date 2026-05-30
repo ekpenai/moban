@@ -36,8 +36,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk \
     fonts-noto-core \
     fonts-noto-extra \
-    fonts-noto-naskh-arabic \
-    fonts-noto-sans-arabic \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
