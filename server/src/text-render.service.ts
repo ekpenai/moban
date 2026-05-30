@@ -75,6 +75,7 @@ type NormalizedLayer = {
   letterSpacing: number;
   color: string;
   fontFamily: string;
+  availableFontFamilies: Set<string>;
   fontWeight: string | number;
   fontSize: number;
   layout: {
@@ -119,6 +120,10 @@ export class TextRenderService implements OnModuleDestroy {
     if (!normalizedLayers.length) return [];
 
     const fontFaces = await this.normalizeFontFaces(fonts);
+    const availableFontFamilies = this.collectAvailableFontFamilies(fontFaces);
+    normalizedLayers.forEach((layer) => {
+      layer.availableFontFamilies = availableFontFamilies;
+    });
     const browser = await this.getBrowser();
     const page = await browser.newPage();
     const gap = 24;
@@ -248,6 +253,7 @@ export class TextRenderService implements OnModuleDestroy {
       letterSpacing: Number(layer.letterSpacing) || 0,
       color: String(layer.color || '#333333'),
       fontFamily: String(layer.fontFamily || 'sans-serif'),
+      availableFontFamilies: new Set<string>(),
       fontWeight: layer.fontWeight || 'normal',
       fontSize: Number(layer.fontSize) || 32,
       layout: {
@@ -394,7 +400,8 @@ export class TextRenderService implements OnModuleDestroy {
   private buildSegmentHtml(layer: NormalizedLayer, segment: TextSegment) {
     const style = segment.style || {};
     const fontSize = Number(segment.fontSize || style.fontSize || layer.fontSize) || layer.fontSize;
-    const fontFamily = String(style.fontFamily || layer.fontFamily || 'sans-serif');
+    const requestedFontFamily = String(style.fontFamily || layer.fontFamily || 'sans-serif');
+    const fontFamily = this.resolveRenderableFontFamily(requestedFontFamily, layer);
     const fontWeight = style.fontWeight || layer.fontWeight || 'normal';
     const color = style.color || layer.color || '#333333';
 
@@ -427,6 +434,24 @@ export class TextRenderService implements OnModuleDestroy {
     ].filter(Boolean);
 
     return families.join(', ');
+  }
+
+  private collectAvailableFontFamilies(fontFaces: FontFaceEntry[]) {
+    const families = new Set<string>();
+    fontFaces.forEach((font) => {
+      [font.family].concat(font.aliases || []).forEach((name) => {
+        const value = String(name || '').trim().toLowerCase();
+        if (value) families.add(value);
+      });
+    });
+    return families;
+  }
+
+  private resolveRenderableFontFamily(fontFamily: string, layer: NormalizedLayer) {
+    const requested = String(fontFamily || '').trim();
+    if (!requested || requested === 'sans-serif') return layer.fontFamily || 'sans-serif';
+    if (!layer.availableFontFamilies.size) return requested;
+    return layer.availableFontFamilies.has(requested.toLowerCase()) ? requested : layer.fontFamily;
   }
 
   private buildFontFaceCss(font: FontFaceEntry) {
