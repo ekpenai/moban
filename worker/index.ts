@@ -137,20 +137,46 @@ function hasArabicScript(text: string | undefined): boolean {
 
 function buildFontStack(fontFamily: string | undefined, prefersArabic: boolean): string {
   const families = [
-    fontFamily ? `"${escapeHtml(fontFamily)}"` : '',
-    prefersArabic ? '"Noto Naskh Arabic"' : '',
-    prefersArabic ? '"Noto Sans Arabic"' : '',
-    '"Noto Sans CJK SC"',
-    '"Noto Sans SC"',
-    '"Noto Sans"',
-    '"Microsoft YaHei"',
-    '"PingFang SC"',
-    '"Helvetica Neue"',
+    fontFamily ? quoteCssFontFamily(fontFamily) : '',
+    prefersArabic ? quoteCssFontFamily('Noto Naskh Arabic') : '',
+    prefersArabic ? quoteCssFontFamily('Noto Sans Arabic') : '',
+    quoteCssFontFamily('Noto Sans CJK SC'),
+    quoteCssFontFamily('Noto Sans SC'),
+    quoteCssFontFamily('Noto Sans'),
+    quoteCssFontFamily('Microsoft YaHei'),
+    quoteCssFontFamily('PingFang SC'),
+    quoteCssFontFamily('Helvetica Neue'),
     'Arial',
     'sans-serif',
   ].filter(Boolean);
 
   return families.join(', ');
+}
+
+function quoteCssFontFamily(value: string): string {
+  const name = String(value || '').trim();
+  if (!name) return '';
+
+  const genericFamilies = new Set([
+    'serif',
+    'sans-serif',
+    'monospace',
+    'cursive',
+    'fantasy',
+    'system-ui',
+    'emoji',
+    'math',
+    'fangsong',
+    'inherit',
+    'initial',
+    'unset',
+    'revert',
+    'revert-layer',
+  ]);
+  const lowerName = name.toLowerCase();
+  if (genericFamilies.has(lowerName)) return lowerName;
+
+  return `'${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 
 function normalizeRenderPayload(template: any): RenderPayload {
@@ -492,7 +518,7 @@ function buildRemoteFontFaceCss(font: { family: string; aliases: string[]; sourc
   const format = detectFontFormat(font.mimeType, font.source);
   return [...new Set(names)].map((name) => `
         @font-face {
-          font-family: "${escapeHtml(String(name))}";
+          font-family: ${quoteCssFontFamily(String(name))};
           src: url("${escapeHtml(font.source)}")${format ? ` format("${format}")` : ''};
           font-display: block;
           font-style: normal;
@@ -515,7 +541,11 @@ async function resolveFontSource(url: string) {
         return await fetchFontAsDataUrl(url);
       } catch (error) {
         fontDataUrlCache.delete(cacheKey);
-        throw error;
+        logger.warn(`Failed to inline font ${url}: ${error instanceof Error ? error.message : String(error)}`);
+        return {
+          source: url,
+          mimeType: inferFontMimeType(url),
+        };
       }
     })();
     fontDataUrlCache.set(cacheKey, request);

@@ -420,15 +420,15 @@ export class TextRenderService implements OnModuleDestroy {
 
   private buildFontStack(fontFamily: string, prefersArabic: boolean) {
     const families = [
-      fontFamily ? `"${this.escapeHtml(fontFamily)}"` : '',
-      prefersArabic ? '"Noto Naskh Arabic"' : '',
-      prefersArabic ? '"Noto Sans Arabic"' : '',
-      '"Noto Sans CJK SC"',
-      '"Noto Sans SC"',
-      '"Noto Sans"',
-      '"Microsoft YaHei"',
-      '"PingFang SC"',
-      '"Helvetica Neue"',
+      fontFamily ? this.quoteCssFontFamily(fontFamily) : '',
+      prefersArabic ? this.quoteCssFontFamily('Noto Naskh Arabic') : '',
+      prefersArabic ? this.quoteCssFontFamily('Noto Sans Arabic') : '',
+      this.quoteCssFontFamily('Noto Sans CJK SC'),
+      this.quoteCssFontFamily('Noto Sans SC'),
+      this.quoteCssFontFamily('Noto Sans'),
+      this.quoteCssFontFamily('Microsoft YaHei'),
+      this.quoteCssFontFamily('PingFang SC'),
+      this.quoteCssFontFamily('Helvetica Neue'),
       'Arial',
       'sans-serif',
     ].filter(Boolean);
@@ -459,7 +459,7 @@ export class TextRenderService implements OnModuleDestroy {
     const format = this.detectFontFormat(font.mimeType, font.source);
     return [...new Set(names)].map((name) => `
       @font-face {
-        font-family: "${this.escapeHtml(String(name))}";
+        font-family: ${this.quoteCssFontFamily(String(name))};
         src: url("${this.escapeHtml(font.source)}")${format ? ` format("${format}")` : ''};
         font-display: block;
         font-style: normal;
@@ -553,7 +553,11 @@ export class TextRenderService implements OnModuleDestroy {
           return await this.fetchFontAsDataUrl(url);
         } catch (error) {
           this.fontDataUrlCache.delete(cacheKey);
-          throw error;
+          this.logger.warn(`Failed to inline font ${url}: ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            source: url,
+            mimeType: this.inferFontMimeType(url),
+          };
         }
       })();
       this.fontDataUrlCache.set(cacheKey, request);
@@ -612,6 +616,32 @@ export class TextRenderService implements OnModuleDestroy {
     if (input.includes('.otf') || input.includes('opentype')) return 'opentype';
     if (input.includes('.ttf') || input.includes('truetype')) return 'truetype';
     return '';
+  }
+
+  private quoteCssFontFamily(value: string) {
+    const name = String(value || '').trim();
+    if (!name) return '';
+
+    const genericFamilies = new Set([
+      'serif',
+      'sans-serif',
+      'monospace',
+      'cursive',
+      'fantasy',
+      'system-ui',
+      'emoji',
+      'math',
+      'fangsong',
+      'inherit',
+      'initial',
+      'unset',
+      'revert',
+      'revert-layer',
+    ]);
+    const lowerName = name.toLowerCase();
+    if (genericFamilies.has(lowerName)) return lowerName;
+
+    return `'${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
   }
 
   private escapeHtml(value: string) {
