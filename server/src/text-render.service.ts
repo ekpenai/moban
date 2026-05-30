@@ -60,9 +60,28 @@ type RenderedTextItem = {
   layerId: string;
   width: number;
   height: number;
+  offsetX: number;
+  offsetY: number;
+  originalWidth: number;
+  originalHeight: number;
   imageUrl?: string;
   imageBase64?: string;
   engine: 'browser';
+};
+
+type TextRenderPadding = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+type StackedTextLayer = {
+  layer: NormalizedLayer;
+  top: number;
+  padding: TextRenderPadding;
+  renderWidth: number;
+  renderHeight: number;
 };
 
 type NormalizedLayer = {
@@ -129,14 +148,17 @@ export class TextRenderService implements OnModuleDestroy {
     const gap = 24;
 
     try {
-      const stacked = normalizedLayers.map((layer, index) => {
-        const top = normalizedLayers
-          .slice(0, index)
-          .reduce((sum, item) => sum + item.height + gap, 0);
-        return { layer, top };
+      let nextTop = 0;
+      const stacked = normalizedLayers.map((layer) => {
+        const padding = this.getLayerPadding(layer);
+        const renderWidth = layer.width + padding.left + padding.right;
+        const renderHeight = layer.height + padding.top + padding.bottom;
+        const item = { layer, top: nextTop, padding, renderWidth, renderHeight };
+        nextTop += renderHeight + gap;
+        return item;
       });
-      const viewportWidth = Math.max(1, ...stacked.map((item) => item.layer.width));
-      const viewportHeight = Math.max(1, stacked.reduce((sum, item) => sum + item.layer.height + gap, 0));
+      const viewportWidth = Math.max(1, ...stacked.map((item) => item.renderWidth));
+      const viewportHeight = Math.max(1, nextTop);
 
       await page.setViewport({
         width: viewportWidth,
@@ -158,16 +180,20 @@ export class TextRenderService implements OnModuleDestroy {
             clip: {
               x: 0,
               y: item.top,
-              width: item.layer.width,
-              height: item.layer.height,
+              width: item.renderWidth,
+              height: item.renderHeight,
             },
           }),
         );
 
         const rendered: RenderedTextItem = {
           layerId: item.layer.id,
-          width: item.layer.width,
-          height: item.layer.height,
+          width: item.renderWidth,
+          height: item.renderHeight,
+          offsetX: -item.padding.left,
+          offsetY: -item.padding.top,
+          originalWidth: item.layer.width,
+          originalHeight: item.layer.height,
           engine: 'browser',
         };
 
@@ -295,7 +321,7 @@ export class TextRenderService implements OnModuleDestroy {
   }
 
   private buildBatchHtml(
-    stackedLayers: Array<{ layer: NormalizedLayer; top: number }>,
+    stackedLayers: StackedTextLayer[],
     fontFaces: FontFaceEntry[],
     width: number,
     height: number,
@@ -304,7 +330,7 @@ export class TextRenderService implements OnModuleDestroy {
       .flatMap((font) => this.buildFontFaceCss(font))
       .join('\n');
 
-    const layersHtml = stackedLayers.map(({ layer, top }) => this.buildLayerHtml(layer, top)).join('\n');
+    const layersHtml = stackedLayers.map((item) => this.buildLayerHtml(item)).join('\n');
 
     return `
       <!doctype html>
@@ -331,8 +357,7 @@ export class TextRenderService implements OnModuleDestroy {
             }
             .text-layer {
               position: absolute;
-              left: 0;
-              overflow: hidden;
+              overflow: visible;
               background: transparent;
             }
             .text-layer[dir="rtl"] {
@@ -359,14 +384,16 @@ export class TextRenderService implements OnModuleDestroy {
     `;
   }
 
-  private buildLayerHtml(layer: NormalizedLayer, top: number) {
+  private buildLayerHtml(item: StackedTextLayer) {
+    const { layer, top, padding } = item;
     const lineHtml = layer.layout.lines.map((line, index) => this.buildLineHtml(layer, line, index, layer.layout.lines.length)).join('');
     return `
       <div
         class="text-layer"
         dir="${layer.direction}"
         style="
-          top:${top}px;
+          left:${padding.left}px;
+          top:${top + padding.top}px;
           width:${layer.width}px;
           height:${layer.height}px;
           color:${this.escapeHtml(layer.color)};
@@ -452,6 +479,23 @@ export class TextRenderService implements OnModuleDestroy {
     if (!requested || requested === 'sans-serif') return layer.fontFamily || 'sans-serif';
     if (!layer.availableFontFamilies.size) return requested;
     return layer.availableFontFamilies.has(requested.toLowerCase()) ? requested : layer.fontFamily;
+  }
+
+  private getLayerPadding(layer: NormalizedLayer): TextRenderPadding {
+    const maxFontSize = Math.max(
+      Number(layer.fontSize) || 0,
+      ...layer.layout.lines.flatMap((line) =>
+        line.segments.map((segment) => Number(segment.fontSize || segment.style?.fontSize || 0) || 0),
+      ),
+    );
+    const base = Math.max(8, Math.ceil(maxFontSize * 0.3));
+
+    return {
+      top: base,
+      right: base,
+      bottom: Math.max(base, Math.ceil(maxFontSize * 0.5)),
+      left: base,
+    };
   }
 
   private buildFontFaceCss(font: FontFaceEntry) {
