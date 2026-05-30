@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import puppeteer, { Browser } from 'puppeteer-core';
 import { S3Service } from './s3.service';
+import { createHash } from 'crypto';
 
 type DeliveryMode = 'url' | 'base64' | 'both';
 
@@ -11,6 +12,8 @@ type RenderFontFace = {
   url?: string;
   fileUrl?: string;
   fontUrl?: string;
+  aliases?: string[];
+  mimeType?: string;
 };
 
 type TextSegment = {
@@ -89,6 +92,8 @@ type NormalizedLayer = {
 type FontFaceEntry = {
   family: string;
   source: string;
+  aliases: string[];
+  mimeType: string;
 };
 
 const ARABIC_SCRIPT_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
@@ -97,6 +102,7 @@ const ARABIC_SCRIPT_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
 export class TextRenderService implements OnModuleDestroy {
   private readonly logger = new Logger(TextRenderService.name);
   private browserPromise: Promise<Browser> | null = null;
+  private readonly fontDataUrlCache = new Map<string, Promise<{ source: string; mimeType: string }>>();
 
   constructor(
     private readonly s3Service: S3Service,
@@ -112,7 +118,7 @@ export class TextRenderService implements OnModuleDestroy {
     const normalizedLayers = (layers || []).map((layer) => this.normalizeLayer(layer)).filter(Boolean) as NormalizedLayer[];
     if (!normalizedLayers.length) return [];
 
-    const fontFaces = this.normalizeFontFaces(fonts);
+    const fontFaces = await this.normalizeFontFaces(fonts);
     const browser = await this.getBrowser();
     const page = await browser.newPage();
     const gap = 24;
@@ -257,19 +263,29 @@ export class TextRenderService implements OnModuleDestroy {
     };
   }
 
-  private normalizeFontFaces(fonts: Record<string, any>[] = []): FontFaceEntry[] {
+  private async normalizeFontFaces(fonts: Record<string, any>[] = []): Promise<FontFaceEntry[]> {
     const seen = new Set<string>();
-    return (fonts || [])
-      .map((font) => {
+    const entries = await Promise.all((fonts || [])
+      .map(async (font) => {
         const family = String(font?.family || font?.fontFamily || '').trim();
-        const source = this.normalizeAssetUrl(String(font?.source || font?.url || font?.fileUrl || font?.fontUrl || '').trim());
-        if (!family || !source) return null;
-        const key = `${family}__${source}`;
+        const rawSource = this.normalizeAssetUrl(String(font?.source || font?.url || font?.fileUrl || font?.fontUrl || '').trim());
+        if (!family || !rawSource) return null;
+        const aliases: string[] = ([] as string[])
+          .concat(Array.isArray(font?.aliases) ? font.aliases.map((item: unknown) => String(item)) : [])
+          .concat(font?.label ? [String(font.label)] : [])
+          .concat(font?.name ? [String(font.name)] : [])
+          .concat(family ? [family] : [])
+          .filter(Boolean)
+          .map((item) => String(item).trim())
+          .filter(Boolean);
+        const source = await this.resolveFontSource(rawSource);
+        const key = `${family}__${source.source}`;
         if (seen.has(key)) return null;
         seen.add(key);
-        return { family, source };
-      })
-      .filter(Boolean) as FontFaceEntry[];
+        return { family, source: source.source, aliases: [...new Set(aliases)], mimeType: source.mimeType };
+      }));
+
+    return entries.filter(Boolean) as FontFaceEntry[];
   }
 
   private buildBatchHtml(
@@ -278,13 +294,9 @@ export class TextRenderService implements OnModuleDestroy {
     width: number,
     height: number,
   ) {
-    const fontFaceCss = fontFaces.map((font) => `
-      @font-face {
-        font-family: "${this.escapeHtml(font.family)}";
-        src: url("${this.escapeHtml(font.source)}");
-        font-display: block;
-      }
-    `).join('\n');
+    const fontFaceCss = fontFaces
+      .flatMap((font) => this.buildFontFaceCss(font))
+      .join('\n');
 
     const layersHtml = stackedLayers.map(({ layer, top }) => this.buildLayerHtml(layer, top)).join('\n');
 
@@ -417,6 +429,20 @@ export class TextRenderService implements OnModuleDestroy {
     return families.join(', ');
   }
 
+  private buildFontFaceCss(font: FontFaceEntry) {
+    const names = [font.family].concat(font.aliases || []).filter(Boolean);
+    const format = this.detectFontFormat(font.mimeType, font.source);
+    return [...new Set(names)].map((name) => `
+      @font-face {
+        font-family: "${this.escapeHtml(String(name))}";
+        src: url("${this.escapeHtml(font.source)}")${format ? ` format("${format}")` : ''};
+        font-display: block;
+        font-style: normal;
+        font-weight: 100 900;
+      }
+    `);
+  }
+
   private detectDirection(layer: TextLayer): 'rtl' | 'ltr' {
     const explicit = String(layer.direction || layer.textDirection || '').toLowerCase();
     if (explicit === 'rtl' || explicit === 'ltr') return explicit;
@@ -485,6 +511,54 @@ export class TextRenderService implements OnModuleDestroy {
     const base = (this.configService.get<string>('PUBLIC_BASE_URL') || this.configService.get<string>('SERVER_BASE_URL') || '').trim().replace(/\/+$/, '');
     if (!base) return url;
     return url.replace(/^https?:\/\/localhost:3000(?=\/|$)/i, base);
+  }
+
+  private async resolveFontSource(url: string) {
+    if (!url || /^data:/i.test(url)) {
+      return {
+        source: url,
+        mimeType: this.inferFontMimeType(url),
+      };
+    }
+
+    const cacheKey = createHash('sha1').update(url).digest('hex');
+    if (!this.fontDataUrlCache.has(cacheKey)) {
+      this.fontDataUrlCache.set(cacheKey, this.fetchFontAsDataUrl(url));
+    }
+    return this.fontDataUrlCache.get(cacheKey)!;
+  }
+
+  private async fetchFontAsDataUrl(url: string) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`font fetch failed ${response.status} ${response.statusText}`);
+    }
+
+    const mimeType = this.inferFontMimeType(response.headers.get('content-type') || url);
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return {
+      source: `data:${mimeType};base64,${base64}`,
+      mimeType,
+    };
+  }
+
+  private inferFontMimeType(value: string) {
+    const input = String(value || '').toLowerCase();
+    if (input.includes('woff2') || input.endsWith('.woff2')) return 'font/woff2';
+    if (input.includes('woff') || input.endsWith('.woff')) return 'font/woff';
+    if (input.includes('opentype') || input.endsWith('.otf')) return 'font/otf';
+    if (input.includes('truetype') || input.endsWith('.ttf')) return 'font/ttf';
+    return 'font/ttf';
+  }
+
+  private detectFontFormat(mimeType: string, source: string) {
+    const input = `${mimeType || ''} ${source || ''}`.toLowerCase();
+    if (input.includes('woff2')) return 'woff2';
+    if (input.includes('woff')) return 'woff';
+    if (input.includes('.otf') || input.includes('opentype')) return 'opentype';
+    if (input.includes('.ttf') || input.includes('truetype')) return 'truetype';
+    return '';
   }
 
   private escapeHtml(value: string) {

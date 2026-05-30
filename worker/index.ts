@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import puppeteer, { Browser } from 'puppeteer';
 import { Mutex } from 'async-mutex';
+import { createHash } from 'crypto';
 
 dotenv.config({ path: path.join(__dirname, '..', 'server', '.env') });
 
@@ -88,6 +89,7 @@ type PosterFontItem = {
   url?: string;
   fileUrl?: string;
   fontUrl?: string;
+  aliases?: string[];
 };
 
 type RenderResult = {
@@ -102,6 +104,7 @@ let s3Client: S3Client | null = null;
 let sharedPagePromise: Promise<any> | null = null;
 const ARABIC_SCRIPT_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
 const renderPageMutex = new Mutex();
+const fontDataUrlCache = new Map<string, Promise<{ source: string; mimeType: string }>>();
 
 function escapeHtml(value: string): string {
   return value
@@ -232,12 +235,20 @@ function normalizeFontItems(fonts: unknown): PosterFontItem[] {
         label: String(font?.label || font?.name || family),
         family,
         source,
+        aliases: ([] as string[])
+          .concat(Array.isArray(font?.aliases) ? font.aliases.map((item: unknown) => String(item)) : [])
+          .concat(font?.label ? [String(font.label)] : [])
+          .concat(font?.name ? [String(font.name)] : [])
+          .concat(family ? [family] : [])
+          .filter(Boolean)
+          .map((item: any) => String(item).trim())
+          .filter(Boolean),
       };
     })
     .filter(Boolean) as PosterFontItem[];
 }
 
-function discoverFontFaces(fonts: PosterFontItem[] = []): string {
+async function discoverFontFaces(fonts: PosterFontItem[] = []): Promise<string> {
   const fontDirs = [
     path.join(__dirname, 'fonts'),
     path.join(__dirname, '..', 'fonts'),
@@ -254,15 +265,20 @@ function discoverFontFaces(fonts: PosterFontItem[] = []): string {
     }
   }
 
-  const remoteFontFaces = fonts
-    .filter((font) => font.family && font.source)
-    .map((font) => `
-        @font-face {
-          font-family: "${escapeHtml(String(font.family))}";
-          src: url("${escapeHtml(normalizeAssetUrl(String(font.source)))}");
-          font-display: block;
-        }
-      `);
+  const remoteEntries = await Promise.all(
+    fonts
+      .filter((font) => font.family && font.source)
+      .map(async (font) => {
+        const resolved = await resolveFontSource(normalizeAssetUrl(String(font.source)));
+        return {
+          family: String(font.family),
+          aliases: Array.isArray(font.aliases) ? font.aliases : [],
+          source: resolved.source,
+          mimeType: resolved.mimeType,
+        };
+      }),
+  );
+  const remoteFontFaces = remoteEntries.flatMap((font) => buildRemoteFontFaceCss(font));
 
   if (fontFiles.length === 0 && remoteFontFaces.length === 0) {
     logger.warn('[Poster] No custom fonts found under worker/fonts or fonts. Falling back to installed fonts.');
@@ -286,10 +302,10 @@ function discoverFontFaces(fonts: PosterFontItem[] = []): string {
   return [...remoteFontFaces, localFontFaces].join('\n');
 }
 
-function buildPosterHtml(payload: RenderPayload): string {
+async function buildPosterHtml(payload: RenderPayload): Promise<string> {
   const width = Math.max(1, Math.round(payload.width));
   const height = Math.max(1, Math.round(payload.height));
-  const fontFaces = discoverFontFaces(payload.fonts || []);
+  const fontFaces = await discoverFontFaces(payload.fonts || []);
 
   const backgroundHtml = payload.backgroundImage
     ? `<img class="poster-bg" src="${escapeHtml(normalizeAssetUrl(payload.backgroundImage))}" alt="" />`
@@ -471,6 +487,66 @@ function buildPosterHtml(payload: RenderPayload): string {
   `;
 }
 
+function buildRemoteFontFaceCss(font: { family: string; aliases: string[]; source: string; mimeType: string }): string[] {
+  const names = [font.family].concat(font.aliases || []).filter(Boolean);
+  const format = detectFontFormat(font.mimeType, font.source);
+  return [...new Set(names)].map((name) => `
+        @font-face {
+          font-family: "${escapeHtml(String(name))}";
+          src: url("${escapeHtml(font.source)}")${format ? ` format("${format}")` : ''};
+          font-display: block;
+          font-style: normal;
+          font-weight: 100 900;
+        }
+      `);
+}
+
+async function resolveFontSource(url: string) {
+  if (!url || /^data:/i.test(url)) {
+    return {
+      source: url,
+      mimeType: inferFontMimeType(url),
+    };
+  }
+  const cacheKey = createHash('sha1').update(url).digest('hex');
+  if (!fontDataUrlCache.has(cacheKey)) {
+    fontDataUrlCache.set(cacheKey, fetchFontAsDataUrl(url));
+  }
+  return fontDataUrlCache.get(cacheKey)!;
+}
+
+async function fetchFontAsDataUrl(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`font fetch failed ${response.status} ${response.statusText}`);
+  }
+  const mimeType = inferFontMimeType(response.headers.get('content-type') || url);
+  const arrayBuffer = await response.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString('base64');
+  return {
+    source: `data:${mimeType};base64,${base64}`,
+    mimeType,
+  };
+}
+
+function inferFontMimeType(value: string): string {
+  const input = String(value || '').toLowerCase();
+  if (input.includes('woff2') || input.endsWith('.woff2')) return 'font/woff2';
+  if (input.includes('woff') || input.endsWith('.woff')) return 'font/woff';
+  if (input.includes('opentype') || input.endsWith('.otf')) return 'font/otf';
+  if (input.includes('truetype') || input.endsWith('.ttf')) return 'font/ttf';
+  return 'font/ttf';
+}
+
+function detectFontFormat(mimeType: string, source: string): string {
+  const input = `${mimeType || ''} ${source || ''}`.toLowerCase();
+  if (input.includes('woff2')) return 'woff2';
+  if (input.includes('woff')) return 'woff';
+  if (input.includes('.otf') || input.includes('opentype')) return 'opentype';
+  if (input.includes('.ttf') || input.includes('truetype')) return 'truetype';
+  return '';
+}
+
 async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
     browserPromise = puppeteer.launch({
@@ -580,7 +656,7 @@ async function renderImage(template: any, onProgress?: (progress: number) => Pro
     });
     await onProgress?.(35);
 
-    await page.setContent(buildPosterHtml(payload), {
+    await page.setContent(await buildPosterHtml(payload), {
       waitUntil: 'domcontentloaded',
     });
     await onProgress?.(55);
