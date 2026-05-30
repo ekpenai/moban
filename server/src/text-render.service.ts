@@ -523,24 +523,42 @@ export class TextRenderService implements OnModuleDestroy {
 
     const cacheKey = createHash('sha1').update(url).digest('hex');
     if (!this.fontDataUrlCache.has(cacheKey)) {
-      this.fontDataUrlCache.set(cacheKey, this.fetchFontAsDataUrl(url));
+      const request: Promise<{ source: string; mimeType: string }> = (async () => {
+        try {
+          return await this.fetchFontAsDataUrl(url);
+        } catch (error) {
+          this.fontDataUrlCache.delete(cacheKey);
+          throw error;
+        }
+      })();
+      this.fontDataUrlCache.set(cacheKey, request);
     }
     return this.fontDataUrlCache.get(cacheKey)!;
   }
 
   private async fetchFontAsDataUrl(url: string) {
-    const response = await fetch(url);
-    if (!response.ok) {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const response = await fetch(url);
+      if (response.ok) {
+        const mimeType = this.inferFontMimeType(response.headers.get('content-type') || url);
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        return {
+          source: `data:${mimeType};base64,${base64}`,
+          mimeType,
+        };
+      }
+
+      if (response.status === 429 && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+        continue;
+      }
+
       throw new Error(`font fetch failed ${response.status} ${response.statusText}`);
     }
 
-    const mimeType = this.inferFontMimeType(response.headers.get('content-type') || url);
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString('base64');
-    return {
-      source: `data:${mimeType};base64,${base64}`,
-      mimeType,
-    };
+    throw new Error('font fetch failed after retries');
   }
 
   private inferFontMimeType(value: string) {

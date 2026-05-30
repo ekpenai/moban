@@ -510,23 +510,42 @@ async function resolveFontSource(url: string) {
   }
   const cacheKey = createHash('sha1').update(url).digest('hex');
   if (!fontDataUrlCache.has(cacheKey)) {
-    fontDataUrlCache.set(cacheKey, fetchFontAsDataUrl(url));
+    const request: Promise<{ source: string; mimeType: string }> = (async () => {
+      try {
+        return await fetchFontAsDataUrl(url);
+      } catch (error) {
+        fontDataUrlCache.delete(cacheKey);
+        throw error;
+      }
+    })();
+    fontDataUrlCache.set(cacheKey, request);
   }
   return fontDataUrlCache.get(cacheKey)!;
 }
 
 async function fetchFontAsDataUrl(url: string) {
-  const response = await fetch(url);
-  if (!response.ok) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetch(url);
+    if (response.ok) {
+      const mimeType = inferFontMimeType(response.headers.get('content-type') || url);
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+      return {
+        source: `data:${mimeType};base64,${base64}`,
+        mimeType,
+      };
+    }
+
+    if (response.status === 429 && attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      continue;
+    }
+
     throw new Error(`font fetch failed ${response.status} ${response.statusText}`);
   }
-  const mimeType = inferFontMimeType(response.headers.get('content-type') || url);
-  const arrayBuffer = await response.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString('base64');
-  return {
-    source: `data:${mimeType};base64,${base64}`,
-    mimeType,
-  };
+
+  throw new Error('font fetch failed after retries');
 }
 
 function inferFontMimeType(value: string): string {
