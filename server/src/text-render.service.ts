@@ -566,9 +566,10 @@ export class TextRenderService implements OnModuleDestroy {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const response = await fetch(url);
       if (response.ok) {
-        const mimeType = this.inferFontMimeType(response.headers.get('content-type') || url);
         const arrayBuffer = await response.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        const buffer = Buffer.from(arrayBuffer);
+        const mimeType = this.inferFontMimeType(url, response.headers.get('content-type'), buffer);
+        const base64 = buffer.toString('base64');
         return {
           source: `data:${mimeType};base64,${base64}`,
           mimeType,
@@ -586,13 +587,22 @@ export class TextRenderService implements OnModuleDestroy {
     throw new Error('font fetch failed after retries');
   }
 
-  private inferFontMimeType(value: string) {
-    const input = String(value || '').toLowerCase();
+  private inferFontMimeType(...values: Array<string | null | undefined | Buffer>) {
+    const buffer = values.find((value): value is Buffer => Buffer.isBuffer(value));
+    if (buffer?.slice(0, 4).toString('hex') === '00010000') return 'font/truetype';
+    if (buffer?.slice(0, 4).toString('ascii') === 'OTTO') return 'font/otf';
+    if (buffer?.slice(0, 4).toString('ascii') === 'wOFF') return 'font/woff';
+    if (buffer?.slice(0, 4).toString('ascii') === 'wOF2') return 'font/woff2';
+
+    const input = values
+      .filter((value): value is string => typeof value === 'string')
+      .join(' ')
+      .toLowerCase();
     if (input.includes('woff2') || input.endsWith('.woff2')) return 'font/woff2';
     if (input.includes('woff') || input.endsWith('.woff')) return 'font/woff';
     if (input.includes('opentype') || input.endsWith('.otf')) return 'font/otf';
-    if (input.includes('truetype') || input.endsWith('.ttf')) return 'font/ttf';
-    return 'font/ttf';
+    if (input.includes('truetype') || input.endsWith('.ttf')) return 'font/truetype';
+    return 'font/truetype';
   }
 
   private detectFontFormat(mimeType: string, source: string) {
