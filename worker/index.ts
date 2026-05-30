@@ -6,6 +6,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import puppeteer, { Browser } from 'puppeteer';
+import { Mutex } from 'async-mutex';
 
 dotenv.config({ path: path.join(__dirname, '..', 'server', '.env') });
 
@@ -98,6 +99,9 @@ const SERVER_BASE_URL = (process.env.SERVER_BASE_URL || process.env.PUBLIC_BASE_
 
 let browserPromise: Promise<Browser> | null = null;
 let s3Client: S3Client | null = null;
+let sharedPagePromise: Promise<any> | null = null;
+const ARABIC_SCRIPT_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
+const renderPageMutex = new Mutex();
 
 function escapeHtml(value: string): string {
   return value
@@ -121,7 +125,29 @@ function normalizeAssetUrl(url: string): string {
 function detectDirection(text: string | undefined, direction?: string): 'rtl' | 'ltr' {
   if (direction === 'rtl' || direction === 'ltr') return direction;
   if (!text) return 'ltr';
-  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(text) ? 'rtl' : 'ltr';
+  return ARABIC_SCRIPT_RE.test(text) ? 'rtl' : 'ltr';
+}
+
+function hasArabicScript(text: string | undefined): boolean {
+  return !!text && ARABIC_SCRIPT_RE.test(text);
+}
+
+function buildFontStack(fontFamily: string | undefined, prefersArabic: boolean): string {
+  const families = [
+    fontFamily ? `"${escapeHtml(fontFamily)}"` : '',
+    prefersArabic ? '"Noto Naskh Arabic"' : '',
+    prefersArabic ? '"Noto Sans Arabic"' : '',
+    '"Noto Sans CJK SC"',
+    '"Noto Sans SC"',
+    '"Noto Sans"',
+    '"Microsoft YaHei"',
+    '"PingFang SC"',
+    '"Helvetica Neue"',
+    'Arial',
+    'sans-serif',
+  ].filter(Boolean);
+
+  return families.join(', ');
 }
 
 function normalizeRenderPayload(template: any): RenderPayload {
@@ -312,6 +338,7 @@ function buildPosterHtml(payload: RenderPayload): string {
   const textHtml = (payload.texts || [])
     .map((item, index) => {
       const direction = detectDirection(item.text, item.direction);
+      const containsArabic = hasArabicScript(item.text);
       const align = (item.align || item.textAlign || (direction === 'rtl' ? 'right' : 'left')).toLowerCase();
       const rotation = Number(item.rotate ?? item.rotation ?? 0) || 0;
       const scaleX = Number(item.scaleX) || 1;
@@ -322,11 +349,15 @@ function buildPosterHtml(payload: RenderPayload): string {
       const lineHeight = typeof item.lineHeight === 'number' && item.lineHeight > 0 ? item.lineHeight : 1.4;
       const letterSpacing = typeof item.letterSpacing === 'number' ? item.letterSpacing : 0;
       const fontWeight = item.fontWeight ?? 'normal';
-      const fontFamily = item.fontFamily ? `"${escapeHtml(item.fontFamily)}"` : '"Noto Naskh Arabic"';
+      const fontFamily = buildFontStack(item.fontFamily, containsArabic || direction === 'rtl');
+      const language = containsArabic || direction === 'rtl' ? 'ar' : 'zh-CN';
+      const textClass = direction === 'rtl' ? 'poster-text poster-text-rtl' : 'poster-text poster-text-ltr';
 
       return `
         <div
-          class="poster-text"
+          class="${textClass}"
+          dir="${direction}"
+          lang="${language}"
           style="
             left:${Math.round(item.x)}px;
             top:${Math.round(item.y)}px;
@@ -344,7 +375,7 @@ function buildPosterHtml(payload: RenderPayload): string {
             transform: translateZ(0) rotate(${rotation}deg) scale(${scaleX}, ${scaleY});
             z-index:${100 + index};
           "
-        >${escapeHtml(item.text)}</div>`;
+        ><span class="poster-text-content">${escapeHtml(item.text)}</span></div>`;
     })
     .join('\n');
 
@@ -369,9 +400,9 @@ function buildPosterHtml(payload: RenderPayload): string {
           }
 
           body {
-            font-family: 'Noto Naskh Arabic', serif;
+            font-family: 'Noto Sans CJK SC', 'Noto Sans', 'Noto Naskh Arabic', 'Noto Sans Arabic', sans-serif;
             -webkit-font-smoothing: antialiased;
-            text-rendering: geometricPrecision;
+            text-rendering: optimizeLegibility;
           }
 
           .poster {
@@ -400,10 +431,32 @@ function buildPosterHtml(payload: RenderPayload): string {
           .poster-text {
             position: absolute;
             white-space: pre-wrap;
-            word-break: break-word;
-            overflow-wrap: anywhere;
+            word-break: normal;
+            overflow-wrap: break-word;
             unicode-bidi: isolate;
             transform-origin: center center;
+            line-break: auto;
+            font-kerning: normal;
+            font-variant-ligatures: common-ligatures contextual;
+          }
+
+          .poster-text-content {
+            display: block;
+          }
+
+          .poster-text-rtl {
+            unicode-bidi: plaintext;
+            transform-origin: top right;
+          }
+
+          .poster-text-rtl .poster-text-content {
+            direction: rtl;
+            unicode-bidi: plaintext;
+            text-align: inherit;
+          }
+
+          .poster-text-ltr {
+            transform-origin: top left;
           }
         </style>
       </head>
@@ -433,6 +486,22 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
+async function getSharedPage(): Promise<any> {
+  if (!sharedPagePromise) {
+    sharedPagePromise = (async () => {
+      const browser = await getBrowser();
+      const page = await browser.newPage();
+      await page.setBypassCSP(true);
+      return page;
+    })().catch((error) => {
+      sharedPagePromise = null;
+      throw error;
+    });
+  }
+
+  return sharedPagePromise;
+}
+
 async function waitForImages(page: any): Promise<void> {
   await page.evaluate(async () => {
     const withTimeout = async (promise: Promise<unknown>, timeoutMs: number) => {
@@ -442,19 +511,41 @@ async function waitForImages(page: any): Promise<void> {
       ]);
     };
 
+    const textNodes = Array.from(document.querySelectorAll<HTMLElement>('.poster-text'));
+    await Promise.all(
+      textNodes.map((node) =>
+        withTimeout(
+          (async () => {
+            if (!document.fonts?.load) return;
+            const computed = window.getComputedStyle(node);
+            const sampleText = node.innerText || node.textContent || 'Sample';
+            await document.fonts.load(computed.font, sampleText);
+          })(),
+          4000,
+        ),
+      ),
+    );
+
     const images = Array.from(document.images);
     await Promise.all(
       images.map((image) =>
         withTimeout(
-          new Promise<void>((resolve) => {
-            if (image.complete) {
-              resolve();
-              return;
+          (async () => {
+            if (!image.complete) {
+              await new Promise<void>((resolve) => {
+                image.addEventListener('load', () => resolve(), { once: true });
+                image.addEventListener('error', () => resolve(), { once: true });
+              });
             }
-            image.addEventListener('load', () => resolve(), { once: true });
-            image.addEventListener('error', () => resolve(), { once: true });
-          }),
-          8000,
+            if (typeof image.decode === 'function') {
+              try {
+                await image.decode();
+              } catch {
+                // Ignore decode failures and fall back to the already loaded bitmap.
+              }
+            }
+          })(),
+          6000,
         ),
       ),
     );
@@ -462,25 +553,26 @@ async function waitForImages(page: any): Promise<void> {
     if (document.fonts?.ready) {
       await withTimeout(document.fonts.ready, 5000);
     }
+
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
 }
 
 async function renderImage(template: any, onProgress?: (progress: number) => Promise<void> | void): Promise<Buffer> {
-  const payload = normalizeRenderPayload(template);
-  await onProgress?.(10);
-  const browser = await getBrowser();
-  await onProgress?.(20);
-  const page = await browser.newPage();
-  const width = Math.max(1, Math.round(payload.width));
-  const height = Math.max(1, Math.round(payload.height));
+  return renderPageMutex.runExclusive(async () => {
+    const payload = normalizeRenderPayload(template);
+    await onProgress?.(10);
+    const page = await getSharedPage();
+    await onProgress?.(20);
+    const width = Math.max(1, Math.round(payload.width));
+    const height = Math.max(1, Math.round(payload.height));
 
-  logger.info(
-    `[Poster] Rendering via Puppeteer width=${width} height=${height} texts=${payload.texts?.length || 0} images=${
-      payload.images?.length || 0
-    } background=${payload.backgroundImage ? 'yes' : 'no'}`,
-  );
+    logger.info(
+      `[Poster] Rendering via Puppeteer width=${width} height=${height} texts=${payload.texts?.length || 0} images=${
+        payload.images?.length || 0
+      } background=${payload.backgroundImage ? 'yes' : 'no'}`,
+    );
 
-  try {
     await page.setViewport({
       width,
       height,
@@ -503,9 +595,7 @@ async function renderImage(template: any, onProgress?: (progress: number) => Pro
     await onProgress?.(95);
 
     return Buffer.from(outputBuffer);
-  } finally {
-    await page.close();
-  }
+  });
 }
 
 async function notifyServer(job: Job, payload: {
@@ -675,6 +765,11 @@ logger.info('[Worker] is ready to process render jobs.');
 
 async function closeWorkerAndBrowser() {
   await worker.close();
+  if (sharedPagePromise) {
+    const page = await sharedPagePromise;
+    await page.close();
+    sharedPagePromise = null;
+  }
   if (browserPromise) {
     const browser = await browserPromise;
     await browser.close();
