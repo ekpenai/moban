@@ -368,6 +368,7 @@ export class TextRenderService implements OnModuleDestroy {
               width: 100%;
               min-height: 1px;
               white-space: nowrap;
+              overflow: visible;
               font-kerning: normal;
               font-variant-ligatures: common-ligatures contextual;
             }
@@ -488,12 +489,12 @@ export class TextRenderService implements OnModuleDestroy {
         line.segments.map((segment) => Number(segment.fontSize || segment.style?.fontSize || 0) || 0),
       ),
     );
-    const base = Math.max(8, Math.ceil(maxFontSize * 0.3));
+    const base = Math.max(12, Math.ceil(maxFontSize * 0.45));
 
     return {
       top: base,
       right: base,
-      bottom: Math.max(base, Math.ceil(maxFontSize * 0.5)),
+      bottom: Math.max(base, Math.ceil(maxFontSize * 0.8)),
       left: base,
     };
   }
