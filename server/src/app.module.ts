@@ -16,6 +16,7 @@ import { ArabicReshapeService } from './arabic-reshape.service';
 import { RenderJobEntity } from './render-job.entity';
 import { RenderJobLogEntity } from './render-job-log.entity';
 import { RenderJobService } from './render-job.service';
+import { CozeCutoutService } from './coze-cutout.service';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -95,6 +96,7 @@ import { join } from 'path';
     AuthTokenService,
     ArabicReshapeService,
     RenderJobService,
+    CozeCutoutService,
   ],
 })
 export class AppModule { }
