@@ -24,6 +24,7 @@ import { CurrentUser } from './current-user.decorator';
 import { ArabicReshapeService } from './arabic-reshape.service';
 import { RenderJobService } from './render-job.service';
 import { TextRenderService } from './text-render.service';
+import { CozeCutoutService } from './coze-cutout.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Request } from 'express';
@@ -60,6 +61,7 @@ export class AppController {
     private readonly arabicReshapeService: ArabicReshapeService,
     private readonly renderJobService: RenderJobService,
     private readonly textRenderService: TextRenderService,
+    private readonly cozeCutoutService: CozeCutoutService,
   ) {}
 
   private getPublicBaseUrl(req?: Request): string {
@@ -230,6 +232,12 @@ export class AppController {
     if (!file) throw new BadRequestException('No file uploaded');
     const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'sys-images');
     return { url };
+  }
+
+  @Post('image/remove-background')
+  async removeImageBackground(@Body('inputUrl') inputUrl: string) {
+    const url = await this.cozeCutoutService.removeBackground(inputUrl);
+    return { success: true, url, imageUrl: url };
   }
 
   @Post('upload/sys-font')
