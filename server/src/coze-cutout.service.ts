@@ -57,18 +57,22 @@ export class CozeCutoutService {
       const url = this.findImageUrl(parsedMessages[i]);
       if (url) return url;
     }
-
-    const directMatch = streamText.match(/https?:\/\/[^\s"'<>\\]+/g) || [];
-    return directMatch[0] || '';
+    return '';
   }
 
   private parseStreamMessages(streamText: string): unknown[] {
     const messages: unknown[] = [];
     const lines = streamText.split(/\r?\n/);
+    let currentEvent = '';
 
     for (const line of lines) {
       const trimmed = line.trim();
+      if (trimmed.startsWith('event:')) {
+        currentEvent = trimmed.replace(/^event:\s*/, '');
+        continue;
+      }
       if (!trimmed.startsWith('data:')) continue;
+      if (currentEvent && currentEvent !== 'Message') continue;
 
       const payload = trimmed.replace(/^data:\s*/, '');
       if (!payload || payload === '[DONE]') continue;
@@ -83,8 +87,8 @@ export class CozeCutoutService {
           messages.push(JSON.parse(parsed.data));
         }
       } catch {
-      const fallbackUrl = this.findImageUrl(payload);
-      if (fallbackUrl) messages.push({ url: fallbackUrl });
+        const fallbackUrl = this.findImageUrl(payload);
+        if (fallbackUrl) messages.push({ url: fallbackUrl });
       }
     }
 
