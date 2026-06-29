@@ -48,7 +48,7 @@ export class CozeCutoutService {
       throw new ServiceUnavailableException('cutout workflow did not return an image URL');
     }
 
-    return imageUrl;
+    return this.resolveRedirectUrl(imageUrl);
   }
 
   private extractImageUrl(streamText: string): string {
@@ -121,5 +121,14 @@ export class CozeCutoutService {
     }
 
     return '';
+  }
+
+  private async resolveRedirectUrl(url: string): Promise<string> {
+    try {
+      const response = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+      return response.url || url;
+    } catch {
+      return url;
+    }
   }
 }
