@@ -213,8 +213,28 @@ export class AppController {
     if (!file) {
       throw new BadRequestException('未接收到 PSD 文件，或文件超过上传上限');
     }
-    const result = await this.psdService.parsePsd(file.path);
-    return { data: result };
+    try {
+      const result = await this.psdService.parsePsd(file.path);
+      return { data: result };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'PSD parse failed';
+      this.logger.error(
+        `[upload/psd] parse failed path=${file.path} name=${file.originalname} size=${file.size}: ${message}`,
+        error instanceof Error ? (error.stack ?? '') : '',
+      );
+      throw new BadRequestException(`PSD 解析失败: ${message}`);
+    } finally {
+      try {
+        if (file.path && fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      } catch (cleanupError) {
+        this.logger.error(
+          `[upload/psd] cleanup failed path=${file.path}`,
+          cleanupError instanceof Error ? (cleanupError.stack ?? '') : '',
+        );
+      }
+    }
   }
 
   @Post('upload/image')
