@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, UseGuards, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException, Res, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Delete, UseGuards, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException, Res, UnauthorizedException, Patch } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, diskStorage } from 'multer';
 import { InjectQueue } from '@nestjs/bull';
@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Template } from './template.entity';
 import { Setting } from './setting.entity';
+import { WxUser } from './wx-user.entity';
 import { SaveTemplateDto, RenderTemplateDto, FillTemplateDto } from './dto/template.dto';
 import { UpdateProfileDto } from './dto/profile.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
@@ -53,6 +54,7 @@ export class AppController {
     @InjectQueue('renderQueue') private renderQueue: Queue,
     @InjectRepository(Template) private templateRepo: Repository<Template>,
     @InjectRepository(Setting) private settingRepo: Repository<Setting>,
+    @InjectRepository(WxUser) private wxUserRepo: Repository<WxUser>,
     private readonly logger: WinstonLoggerService,
     private readonly wechatAuthService: WechatAuthService,
     private readonly userDataService: UserDataService,
@@ -318,6 +320,156 @@ export class AppController {
   async getSetting(@Param('key') key: string) {
     const setting = await this.settingRepo.findOne({ where: { key } });
     return { data: setting ? setting.value : null };
+  }
+
+  @Get('admin/dashboard')
+  async getAdminDashboard() {
+    const [userCount, templateCount] = await Promise.all([
+      this.wxUserRepo.count(),
+      this.templateRepo.count(),
+    ]);
+
+    const settings = await this.settingRepo.find();
+    const settingsMap = new Map(settings.map((item) => [item.key, item.value]));
+
+    const categoriesValue = settingsMap.get('categories');
+    const fontsValue = settingsMap.get('fonts');
+    const categoriesCount = Array.isArray(categoriesValue) ? categoriesValue.length : 0;
+    const fontsCount = Array.isArray(fontsValue) ? fontsValue.length : 0;
+
+    const vipSetting = settingsMap.get('admin_vip_user_ids');
+    const adminSetting = settingsMap.get('admin_admin_user_ids');
+    const vipUserIds = Array.isArray(vipSetting) ? vipSetting.map((item) => String(item)) : [];
+    const adminUserIds = Array.isArray(adminSetting) ? adminSetting.map((item) => String(item)) : [];
+
+    return {
+      success: true,
+      data: {
+        userCount,
+        templateCount,
+        vipCount: vipUserIds.length,
+        adminCount: adminUserIds.length,
+        categoriesCount,
+        fontsCount,
+        systemStatus: 'ONLINE',
+        miniProgramStatus: 'READY',
+      },
+    };
+  }
+
+  @Get('admin/users')
+  async getAdminUsers() {
+    const [users, settings] = await Promise.all([
+      this.wxUserRepo.find({ order: { updatedAt: 'DESC' } }),
+      this.settingRepo.find({
+        where: [
+          { key: 'admin_vip_user_ids' },
+          { key: 'admin_admin_user_ids' },
+        ],
+      }),
+    ]);
+
+    const settingsMap = new Map(settings.map((item) => [item.key, item.value]));
+    const vipUserIds = new Set(
+      Array.isArray(settingsMap.get('admin_vip_user_ids'))
+        ? settingsMap.get('admin_vip_user_ids').map((item: unknown) => String(item))
+        : [],
+    );
+    const adminUserIds = new Set(
+      Array.isArray(settingsMap.get('admin_admin_user_ids'))
+        ? settingsMap.get('admin_admin_user_ids').map((item: unknown) => String(item))
+        : [],
+    );
+
+    return {
+      success: true,
+      data: users.map((user) => {
+        const userId = String(user.id);
+        const isAdmin = adminUserIds.has(userId);
+        return {
+          id: userId,
+          name: user.nickName || '微信用户',
+          phone: user.openid ? `openid:${user.openid.slice(0, 6)}...` : '',
+          role: isAdmin ? 'Admin' : 'User',
+          vip: vipUserIds.has(userId),
+          status: user.lastLoginAt ? '活跃' : '待接入',
+          note: user.city || user.province || user.country || '微信登录用户',
+          avatarUrl: user.avatarUrl || '',
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          lastLoginAt: user.lastLoginAt,
+        };
+      }),
+    };
+  }
+
+  @Patch('admin/users/:id')
+  async updateAdminUserFlags(
+    @Param('id') id: string,
+    @Body() body: { vip?: boolean; role?: 'Admin' | 'User' },
+  ) {
+    const user = await this.wxUserRepo.findOne({ where: { id } });
+    if (!user) {
+      throw new BadRequestException('user not found');
+    }
+
+    const keys = ['admin_vip_user_ids', 'admin_admin_user_ids'] as const;
+    const settings = await this.settingRepo.find({ where: keys.map((key) => ({ key })) });
+    const settingsMap = new Map(settings.map((item) => [item.key, item]));
+
+    const ensureSetting = (key: (typeof keys)[number]) => {
+      const existing = settingsMap.get(key);
+      if (existing) return existing;
+      const created = this.settingRepo.create({ key, value: [] });
+      settingsMap.set(key, created);
+      return created;
+    };
+
+    const updateIdList = (key: (typeof keys)[number], enabled: boolean) => {
+      const setting = ensureSetting(key);
+      const current = Array.isArray(setting.value) ? setting.value.map((item: unknown) => String(item)) : [];
+      const next = new Set(current);
+      if (enabled) {
+        next.add(String(id));
+      } else {
+        next.delete(String(id));
+      }
+      setting.value = Array.from(next);
+      return setting;
+    };
+
+    const pendingSaves: Setting[] = [];
+    if (typeof body.vip === 'boolean') {
+      pendingSaves.push(updateIdList('admin_vip_user_ids', body.vip));
+    }
+    if (body.role === 'Admin' || body.role === 'User') {
+      pendingSaves.push(updateIdList('admin_admin_user_ids', body.role === 'Admin'));
+    }
+
+    if (pendingSaves.length > 0) {
+      await this.settingRepo.save(pendingSaves);
+    }
+
+    return {
+      success: true,
+      data: {
+        id: String(user.id),
+        vip: typeof body.vip === 'boolean' ? body.vip : undefined,
+        role: body.role,
+      },
+    };
+  }
+
+  @Get('admin/settings')
+  async getAdminSettings() {
+    const settings = await this.settingRepo.find();
+    return {
+      success: true,
+      data: settings.map((item) => ({
+        key: item.key,
+        value: item.value,
+      })),
+    };
   }
 
   @Post('settings/:key')

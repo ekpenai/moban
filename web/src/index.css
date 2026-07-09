@@ -1,27 +1,84 @@
 @import "tailwindcss";
 
-html, body, #root {
+:root {
+  color-scheme: light;
+  font-family:
+    "Plus Jakarta Sans",
+    "SF Pro Display",
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
+html,
+body,
+#root {
   width: 100%;
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #f3f4f6;
+  background:
+    radial-gradient(circle at top left, rgba(122, 144, 255, 0.28), transparent 26%),
+    radial-gradient(circle at bottom left, rgba(160, 122, 255, 0.22), transparent 22%),
+    linear-gradient(135deg, #d6e0ff 0%, #edf2ff 38%, #edf2fb 100%);
+  color: #23324f;
 }
 
-.dashboard-pattern {
-  background-color: #f5f7fb;
-  background-image: radial-gradient(#d1d5db 1px, transparent 1px);
-  background-size: 24px 24px;
+body {
+  overflow: hidden;
 }
 
-/* 隐藏滚动条但保留功能 */
+.moban-admin-shell::before {
+  content: "";
+  position: absolute;
+  inset: 28px;
+  border-radius: 40px;
+  background: rgba(255, 255, 255, 0.22);
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.moban-card {
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 255, 0.92));
+  border-radius: 32px;
+  box-shadow:
+    0 24px 48px rgba(149, 163, 203, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.moban-stage-shell {
+  backdrop-filter: blur(18px);
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 8px;
+  height: 8px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.2);
+  background: linear-gradient(180deg, rgba(109, 130, 255, 0.55), rgba(165, 175, 255, 0.72));
   border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
+
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+img {
+  display: block;
 }
