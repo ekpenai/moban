@@ -57,12 +57,40 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   const logger = app.get(WinstonLoggerService);
+
+  const corsOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
   
   app.use(compression());
   app.use(json({ limit: process.env.UPLOAD_LIMIT || '50mb' }));
   app.use(urlencoded({ extended: true, limit: process.env.UPLOAD_LIMIT || '50mb' }));
-  
-  app.enableCors();
+
+  app.enableCors({
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (corsOrigins.length === 0) {
+        callback(null, true);
+        return;
+      }
+
+      if (corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked origin: ${origin}`), false);
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    credentials: false,
+    optionsSuccessStatus: 204,
+  });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.useGlobalFilters(new AllExceptionsFilter(logger));
 

@@ -94,10 +94,34 @@ async function bootstrap() {
     }
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const logger = app.get(logger_service_1.WinstonLoggerService);
+    const corsOrigins = (process.env.CORS_ORIGINS || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
     app.use(compression());
     app.use((0, express_1.json)({ limit: process.env.UPLOAD_LIMIT || '50mb' }));
     app.use((0, express_1.urlencoded)({ extended: true, limit: process.env.UPLOAD_LIMIT || '50mb' }));
-    app.enableCors();
+    app.enableCors({
+        origin: (origin, callback) => {
+            if (!origin) {
+                callback(null, true);
+                return;
+            }
+            if (corsOrigins.length === 0) {
+                callback(null, true);
+                return;
+            }
+            if (corsOrigins.includes(origin)) {
+                callback(null, true);
+                return;
+            }
+            callback(new Error(`CORS blocked origin: ${origin}`), false);
+        },
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+        credentials: false,
+        optionsSuccessStatus: 204,
+    });
     app.useGlobalPipes(new common_1.ValidationPipe({ transform: true, whitelist: true }));
     app.useGlobalFilters(new AllExceptionsFilter(logger));
     const port = process.env.PORT || 3000;

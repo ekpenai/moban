@@ -56,15 +56,21 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const template_entity_1 = require("./template.entity");
 const setting_entity_1 = require("./setting.entity");
+const wx_user_entity_1 = require("./wx-user.entity");
 const template_dto_1 = require("./dto/template.dto");
 const profile_dto_1 = require("./dto/profile.dto");
 const wechat_login_dto_1 = require("./dto/wechat-login.dto");
 const user_data_dto_1 = require("./dto/user-data.dto");
+const arabic_reshape_dto_1 = require("./dto/arabic-reshape.dto");
+const render_job_dto_1 = require("./dto/render-job.dto");
 const logger_service_1 = require("./logger.service");
 const wechat_auth_service_1 = require("./wechat-auth.service");
 const user_data_service_1 = require("./user-data.service");
 const auth_guard_1 = require("./auth.guard");
 const current_user_decorator_1 = require("./current-user.decorator");
+const arabic_reshape_service_1 = require("./arabic-reshape.service");
+const render_job_service_1 = require("./render-job.service");
+const coze_cutout_service_1 = require("./coze-cutout.service");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 function parseSizeToBytes(input, fallbackBytes) {
@@ -82,24 +88,33 @@ function parseSizeToBytes(input, fallbackBytes) {
     return Math.max(1, Math.floor(value * factor));
 }
 const PSD_UPLOAD_LIMIT_BYTES = parseSizeToBytes(process.env.PSD_UPLOAD_LIMIT || '300mb', 300 * 1024 * 1024);
+const ALLOWED_FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.woff', '.woff2']);
 let AppController = class AppController {
     psdService;
     s3Service;
     renderQueue;
     templateRepo;
     settingRepo;
+    wxUserRepo;
     logger;
     wechatAuthService;
     userDataService;
-    constructor(psdService, s3Service, renderQueue, templateRepo, settingRepo, logger, wechatAuthService, userDataService) {
+    arabicReshapeService;
+    renderJobService;
+    cozeCutoutService;
+    constructor(psdService, s3Service, renderQueue, templateRepo, settingRepo, wxUserRepo, logger, wechatAuthService, userDataService, arabicReshapeService, renderJobService, cozeCutoutService) {
         this.psdService = psdService;
         this.s3Service = s3Service;
         this.renderQueue = renderQueue;
         this.templateRepo = templateRepo;
         this.settingRepo = settingRepo;
+        this.wxUserRepo = wxUserRepo;
         this.logger = logger;
         this.wechatAuthService = wechatAuthService;
         this.userDataService = userDataService;
+        this.arabicReshapeService = arabicReshapeService;
+        this.renderJobService = renderJobService;
+        this.cozeCutoutService = cozeCutoutService;
     }
     getPublicBaseUrl(req) {
         const envBase = (process.env.PUBLIC_BASE_URL || '').trim();
@@ -228,8 +243,25 @@ let AppController = class AppController {
         if (!file) {
             throw new common_1.BadRequestException('未接收到 PSD 文件，或文件超过上传上限');
         }
-        const result = await this.psdService.parsePsd(file.path);
-        return { data: result };
+        try {
+            const result = await this.psdService.parsePsd(file.path);
+            return { data: result };
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'PSD parse failed';
+            this.logger.error(`[upload/psd] parse failed path=${file.path} name=${file.originalname} size=${file.size}: ${message}`, error instanceof Error ? (error.stack ?? '') : '');
+            throw new common_1.BadRequestException(`PSD 解析失败: ${message}`);
+        }
+        finally {
+            try {
+                if (file.path && fs.existsSync(file.path)) {
+                    fs.unlinkSync(file.path);
+                }
+            }
+            catch (cleanupError) {
+                this.logger.error(`[upload/psd] cleanup failed path=${file.path}`, cleanupError instanceof Error ? (cleanupError.stack ?? '') : '');
+            }
+        }
     }
     async uploadImage(file, req) {
         if (!file)
@@ -243,8 +275,30 @@ let AppController = class AppController {
         const url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype, 'sys-images');
         return { url };
     }
+    async removeImageBackground(inputUrl) {
+        const url = await this.cozeCutoutService.removeBackground(inputUrl);
+        return { success: true, url, imageUrl: url };
+    }
+    async uploadSysFont(file) {
+        if (!file)
+            throw new common_1.BadRequestException('No file uploaded');
+        const ext = path.extname(file.originalname || '').toLowerCase();
+        if (!ALLOWED_FONT_EXTENSIONS.has(ext)) {
+            throw new common_1.BadRequestException('Only ttf, otf, woff, woff2 font files are supported');
+        }
+        const mimeType = file.mimetype || 'font/ttf';
+        const url = await this.s3Service.uploadFile(file.buffer, file.originalname, mimeType, 'fonts');
+        return {
+            url,
+            name: path.basename(file.originalname, ext),
+            ext,
+        };
+    }
     async wechatLogin(body) {
         return this.wechatAuthService.login(body);
+    }
+    async reshapeArabic(body) {
+        return this.arabicReshapeService.reshapeText(body.text, body.mode);
     }
     async getProfile(user) {
         return this.wechatAuthService.getProfile(user.userId);
@@ -273,6 +327,131 @@ let AppController = class AppController {
     async getSetting(key) {
         const setting = await this.settingRepo.findOne({ where: { key } });
         return { data: setting ? setting.value : null };
+    }
+    async getAdminDashboard() {
+        const [userCount, templateCount] = await Promise.all([
+            this.wxUserRepo.count(),
+            this.templateRepo.count(),
+        ]);
+        const settings = await this.settingRepo.find();
+        const settingsMap = new Map(settings.map((item) => [item.key, item.value]));
+        const categoriesValue = settingsMap.get('categories');
+        const fontsValue = settingsMap.get('fonts');
+        const categoriesCount = Array.isArray(categoriesValue) ? categoriesValue.length : 0;
+        const fontsCount = Array.isArray(fontsValue) ? fontsValue.length : 0;
+        const vipSetting = settingsMap.get('admin_vip_user_ids');
+        const adminSetting = settingsMap.get('admin_admin_user_ids');
+        const vipUserIds = Array.isArray(vipSetting) ? vipSetting.map((item) => String(item)) : [];
+        const adminUserIds = Array.isArray(adminSetting) ? adminSetting.map((item) => String(item)) : [];
+        return {
+            success: true,
+            data: {
+                userCount,
+                templateCount,
+                vipCount: vipUserIds.length,
+                adminCount: adminUserIds.length,
+                categoriesCount,
+                fontsCount,
+                systemStatus: 'ONLINE',
+                miniProgramStatus: 'READY',
+            },
+        };
+    }
+    async getAdminUsers() {
+        const [users, settings] = await Promise.all([
+            this.wxUserRepo.find({ order: { updatedAt: 'DESC' } }),
+            this.settingRepo.find({
+                where: [
+                    { key: 'admin_vip_user_ids' },
+                    { key: 'admin_admin_user_ids' },
+                ],
+            }),
+        ]);
+        const settingsMap = new Map(settings.map((item) => [item.key, item.value]));
+        const vipUserIds = new Set(Array.isArray(settingsMap.get('admin_vip_user_ids'))
+            ? settingsMap.get('admin_vip_user_ids').map((item) => String(item))
+            : []);
+        const adminUserIds = new Set(Array.isArray(settingsMap.get('admin_admin_user_ids'))
+            ? settingsMap.get('admin_admin_user_ids').map((item) => String(item))
+            : []);
+        return {
+            success: true,
+            data: users.map((user) => {
+                const userId = String(user.id);
+                const isAdmin = adminUserIds.has(userId);
+                return {
+                    id: userId,
+                    name: user.nickName || '微信用户',
+                    phone: user.openid ? `openid:${user.openid.slice(0, 6)}...` : '',
+                    role: isAdmin ? 'Admin' : 'User',
+                    vip: vipUserIds.has(userId),
+                    status: user.lastLoginAt ? '活跃' : '待接入',
+                    note: user.city || user.province || user.country || '微信登录用户',
+                    avatarUrl: user.avatarUrl || '',
+                    createdAt: user.createdAt,
+                    updatedAt: user.updatedAt,
+                    lastLoginAt: user.lastLoginAt,
+                };
+            }),
+        };
+    }
+    async updateAdminUserFlags(id, body) {
+        const user = await this.wxUserRepo.findOne({ where: { id } });
+        if (!user) {
+            throw new common_1.BadRequestException('user not found');
+        }
+        const keys = ['admin_vip_user_ids', 'admin_admin_user_ids'];
+        const settings = await this.settingRepo.find({ where: keys.map((key) => ({ key })) });
+        const settingsMap = new Map(settings.map((item) => [item.key, item]));
+        const ensureSetting = (key) => {
+            const existing = settingsMap.get(key);
+            if (existing)
+                return existing;
+            const created = this.settingRepo.create({ key, value: [] });
+            settingsMap.set(key, created);
+            return created;
+        };
+        const updateIdList = (key, enabled) => {
+            const setting = ensureSetting(key);
+            const current = Array.isArray(setting.value) ? setting.value.map((item) => String(item)) : [];
+            const next = new Set(current);
+            if (enabled) {
+                next.add(String(id));
+            }
+            else {
+                next.delete(String(id));
+            }
+            setting.value = Array.from(next);
+            return setting;
+        };
+        const pendingSaves = [];
+        if (typeof body.vip === 'boolean') {
+            pendingSaves.push(updateIdList('admin_vip_user_ids', body.vip));
+        }
+        if (body.role === 'Admin' || body.role === 'User') {
+            pendingSaves.push(updateIdList('admin_admin_user_ids', body.role === 'Admin'));
+        }
+        if (pendingSaves.length > 0) {
+            await this.settingRepo.save(pendingSaves);
+        }
+        return {
+            success: true,
+            data: {
+                id: String(user.id),
+                vip: typeof body.vip === 'boolean' ? body.vip : undefined,
+                role: body.role,
+            },
+        };
+    }
+    async getAdminSettings() {
+        const settings = await this.settingRepo.find();
+        return {
+            success: true,
+            data: settings.map((item) => ({
+                key: item.key,
+                value: item.value,
+            })),
+        };
     }
     async saveSetting(key, body) {
         let setting = await this.settingRepo.findOne({ where: { key } });
@@ -387,11 +566,21 @@ let AppController = class AppController {
         await this.templateRepo.delete(ids);
         return { success: true };
     }
-    async renderTemplate(body) {
+    async renderTemplate(user, body, req) {
         this.logger.log(`Received render request for template`);
+        if (!body?.template || !Array.isArray(body.template.layers)) {
+            throw new common_1.BadRequestException('template.layers is required');
+        }
         try {
+            const sourceHeader = String(req.headers['x-render-source'] || '').trim().toLowerCase();
+            const userAgent = String(req.headers['user-agent'] || '').toLowerCase();
+            const source = sourceHeader === 'mini_program' || userAgent.includes('miniprogram') || userAgent.includes('micromessenger')
+                ? 'mini_program'
+                : 'web';
             const enqueuePromise = this.renderQueue.add('render-job', {
                 template: body.template,
+                userId: user.userId,
+                source,
             }, {
                 attempts: 3,
                 backoff: {
@@ -402,33 +591,175 @@ let AppController = class AppController {
                 removeOnFail: 500,
             });
             const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('enqueue_timeout')), 12000);
+                setTimeout(() => reject(new Error('enqueue_timeout')), 1800);
             });
             const job = await Promise.race([enqueuePromise, timeoutPromise]);
-            const counts = await this.renderQueue.getJobCounts();
-            this.logger.log(`Job ${job.id} added successfully. Queue status: ${JSON.stringify(counts)}`);
-            return { jobId: job.id };
+            await this.renderJobService.createJob({
+                jobId: String(job.id),
+                userId: user.userId,
+                source,
+                status: 'queued',
+                stage: 'queued',
+                progress: 0,
+                message: 'Render job queued',
+            });
+            this.logger.log(`Job ${job.id} added successfully.`);
+            return {
+                jobId: String(job.id),
+                status: 'queued',
+            };
         }
         catch (err) {
             this.logger.error('Failed to add job to Redis', err.stack);
             if (err?.message === 'enqueue_timeout') {
-                throw new common_1.ServiceUnavailableException('渲染队列暂时不可用，请稍后重试');
+                throw new common_1.ServiceUnavailableException('render queue unavailable');
             }
-            throw new common_1.ServiceUnavailableException('渲染任务提交失败，请稍后重试');
+            throw new common_1.ServiceUnavailableException('failed to submit render job');
         }
     }
-    async getRenderStatus(jobId) {
+    async getRenderStatus(user, jobId) {
+        const ownedJob = await this.renderJobService.getJobForUser(jobId, user.userId);
         const job = await this.renderQueue.getJob(jobId);
         if (!job) {
-            return { status: 'not_found' };
+            return {
+                jobId,
+                status: 'failed',
+                stage: ownedJob.stage || 'failed',
+                progress: ownedJob.progress || 0,
+                message: ownedJob.failedReason || ownedJob.message || 'job not found or expired',
+                updatedAt: ownedJob.updatedAt?.toISOString?.() || null,
+                durationMs: ownedJob.startedAt ? Math.max(0, (ownedJob.completedAt || ownedJob.updatedAt).getTime() - ownedJob.startedAt.getTime()) : null,
+            };
         }
         const state = await job.getState();
-        const result = job.returnvalue;
+        const progressValue = job.progress();
+        const progress = typeof progressValue === 'number'
+            ? progressValue
+            : typeof progressValue === 'object' && typeof progressValue?.percent === 'number'
+                ? progressValue.percent
+                : state === 'completed'
+                    ? 100
+                    : state === 'active'
+                        ? 1
+                        : 0;
+        if (state === 'completed') {
+            const returnValue = job.returnvalue;
+            const imageUrl = returnValue?.imageUrl || job.data?.uploadedImageUrl;
+            let imageBase64 = returnValue?.imageBase64;
+            if (!imageUrl && typeof returnValue === 'string' && returnValue.startsWith('data:image/')) {
+                imageBase64 = returnValue;
+            }
+            const detail = await this.renderJobService.getJobDetailForUser(jobId, user.userId);
+            return {
+                jobId,
+                status: 'completed',
+                progress: 100,
+                stage: detail.stage || 'completed',
+                message: detail.message,
+                imageUrl,
+                result: !imageUrl ? imageBase64 : undefined,
+                updatedAt: detail.updatedAt,
+                durationMs: detail.durationMs,
+                recentLogs: detail.recentLogs,
+            };
+        }
+        if (state === 'failed') {
+            const detail = await this.renderJobService.getJobDetailForUser(jobId, user.userId);
+            return {
+                jobId,
+                status: 'failed',
+                progress,
+                stage: detail.stage || 'failed',
+                message: detail.failedReason || detail.message || String(job.failedReason || 'render failed'),
+                updatedAt: detail.updatedAt,
+                durationMs: detail.durationMs,
+                recentLogs: detail.recentLogs,
+            };
+        }
+        const normalizedStatus = state === 'active'
+            ? 'processing'
+            : state === 'waiting' || state === 'delayed' || state === 'paused'
+                ? 'queued'
+                : state;
+        const detail = await this.renderJobService.getJobDetailForUser(jobId, user.userId);
         return {
-            status: state,
-            result,
-            failedReason: state === 'failed' ? String(job.failedReason || '') : undefined,
+            jobId,
+            status: normalizedStatus,
+            progress,
+            stage: detail.stage || normalizedStatus,
+            message: detail.message,
+            updatedAt: detail.updatedAt,
+            durationMs: detail.durationMs,
+            recentLogs: detail.recentLogs,
         };
+    }
+    async listRenderJobs(user, req) {
+        const query = req.query;
+        return {
+            success: true,
+            data: await this.renderJobService.listJobsForUser(user.userId, query),
+        };
+    }
+    async getRenderJobDetail(user, jobId) {
+        return {
+            success: true,
+            data: await this.renderJobService.getJobDetailForUser(jobId, user.userId),
+        };
+    }
+    async getRenderJobLogs(user, jobId) {
+        return {
+            success: true,
+            data: await this.renderJobService.getJobLogsForUser(jobId, user.userId),
+        };
+    }
+    async streamRenderJob(user, jobId, res) {
+        await this.renderJobService.getJobForUser(jobId, user.userId);
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders?.();
+        const writeEvent = (event, payload) => {
+            res.write(`event: ${event}\n`);
+            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        };
+        writeEvent('snapshot', await this.renderJobService.getJobDetailForUser(jobId, user.userId));
+        writeEvent('logs', await this.renderJobService.getJobLogsForUser(jobId, user.userId));
+        const unsubscribe = this.renderJobService.subscribe(jobId, (event) => {
+            writeEvent(event.type, event.payload);
+        });
+        const heartbeat = setInterval(() => {
+            res.write(': ping\n\n');
+        }, 15000);
+        res.on('close', () => {
+            clearInterval(heartbeat);
+            unsubscribe();
+            res.end();
+        });
+    }
+    async recordRenderJobEvent(jobId, body, req) {
+        const internalToken = (process.env.WORKER_INTERNAL_TOKEN || '').trim();
+        if (internalToken) {
+            const authorization = String(req.headers.authorization || '');
+            const expected = `Bearer ${internalToken}`;
+            if (authorization !== expected) {
+                throw new common_1.UnauthorizedException({ success: false, message: 'invalid worker token' });
+            }
+        }
+        await this.renderJobService.recordEvent({
+            jobId,
+            userId: body.userId,
+            status: body.status,
+            stage: body.stage,
+            progress: typeof body.progress === 'number' ? body.progress : undefined,
+            message: body.message,
+            level: body.level,
+            imageUrl: body.imageUrl,
+            failedReason: body.failedReason,
+            startedAt: body.startedAt,
+            completedAt: body.completedAt,
+            meta: body.meta,
+        });
+        return { success: true };
     }
 };
 exports.AppController = AppController;
@@ -467,12 +798,34 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "uploadSysImage", null);
 __decorate([
+    (0, common_1.Post)('image/remove-background'),
+    __param(0, (0, common_1.Body)('inputUrl')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "removeImageBackground", null);
+__decorate([
+    (0, common_1.Post)('upload/sys-font'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { storage: (0, multer_1.memoryStorage)() })),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "uploadSysFont", null);
+__decorate([
     (0, common_1.Post)('auth/wechat-login'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [wechat_login_dto_1.WechatLoginDto]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "wechatLogin", null);
+__decorate([
+    (0, common_1.Post)('api/arabic/reshape'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [arabic_reshape_dto_1.ArabicReshapeDto]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "reshapeArabic", null);
 __decorate([
     (0, common_1.Get)('me/profile'),
     (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
@@ -550,6 +903,32 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "getSetting", null);
 __decorate([
+    (0, common_1.Get)('admin/dashboard'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getAdminDashboard", null);
+__decorate([
+    (0, common_1.Get)('admin/users'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getAdminUsers", null);
+__decorate([
+    (0, common_1.Patch)('admin/users/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updateAdminUserFlags", null);
+__decorate([
+    (0, common_1.Get)('admin/settings'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getAdminSettings", null);
+__decorate([
     (0, common_1.Post)('settings/:key'),
     __param(0, (0, common_1.Param)('key')),
     __param(1, (0, common_1.Body)()),
@@ -604,28 +983,84 @@ __decorate([
 ], AppController.prototype, "batchDeleteTemplates", null);
 __decorate([
     (0, common_1.Post)('render'),
-    __param(0, (0, common_1.Body)()),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [template_dto_1.RenderTemplateDto]),
+    __metadata("design:paramtypes", [Object, template_dto_1.RenderTemplateDto, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "renderTemplate", null);
 __decorate([
     (0, common_1.Get)('render/:jobId'),
-    __param(0, (0, common_1.Param)('jobId')),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('jobId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "getRenderStatus", null);
+__decorate([
+    (0, common_1.Get)('me/render-jobs'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "listRenderJobs", null);
+__decorate([
+    (0, common_1.Get)('me/render-jobs/:jobId'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('jobId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getRenderJobDetail", null);
+__decorate([
+    (0, common_1.Get)('me/render-jobs/:jobId/logs'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('jobId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getRenderJobLogs", null);
+__decorate([
+    (0, common_1.Get)('me/render-jobs/:jobId/stream'),
+    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('jobId')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "streamRenderJob", null);
+__decorate([
+    (0, common_1.Post)('internal/render-jobs/:jobId/events'),
+    __param(0, (0, common_1.Param)('jobId')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, render_job_dto_1.CreateRenderEventDto, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "recordRenderJobEvent", null);
 exports.AppController = AppController = __decorate([
     (0, common_1.Controller)(),
     __param(2, (0, bull_1.InjectQueue)('renderQueue')),
     __param(3, (0, typeorm_1.InjectRepository)(template_entity_1.Template)),
     __param(4, (0, typeorm_1.InjectRepository)(setting_entity_1.Setting)),
+    __param(5, (0, typeorm_1.InjectRepository)(wx_user_entity_1.WxUser)),
     __metadata("design:paramtypes", [psd_service_1.PsdService,
         s3_service_1.S3Service, Object, typeorm_2.Repository,
         typeorm_2.Repository,
+        typeorm_2.Repository,
         logger_service_1.WinstonLoggerService,
         wechat_auth_service_1.WechatAuthService,
-        user_data_service_1.UserDataService])
+        user_data_service_1.UserDataService,
+        arabic_reshape_service_1.ArabicReshapeService,
+        render_job_service_1.RenderJobService,
+        coze_cutout_service_1.CozeCutoutService])
 ], AppController);
 //# sourceMappingURL=app.controller.js.map
