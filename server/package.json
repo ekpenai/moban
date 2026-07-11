@@ -30,6 +30,7 @@
     "@nestjs/serve-static": "^5.0.5",
     "@nestjs/typeorm": "^11.0.1",
     "@types/compression": "^1.8.1",
+    "@webtoon/psd": "^0.4.0",
     "ag-psd": "^30.1.1",
     "arabic-persian-reshaper": "^1.0.1",
     "bull": "^4.16.5",
