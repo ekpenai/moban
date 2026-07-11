@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
   Crown,
   DownloadCloud,
@@ -31,7 +31,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { useEditorStore } from './store/useEditorStore';
 import type { TemplateData, TemplateLayer } from './types';
 
-type WorkspaceTab = 'dashboard' | 'studio' | 'templates' | 'users';
+type WorkspaceTab = 'dashboard' | 'studio' | 'templates' | 'users' | 'settings';
+
 type InspectorTab = 'layers' | 'tools';
 type MpMessagePayload = Record<string, unknown>;
 
@@ -544,6 +545,8 @@ function App() {
     { id: 'studio' as WorkspaceTab, label: '工作台', icon: <Palette size={18} /> },
     { id: 'templates' as WorkspaceTab, label: '模板', icon: <FolderHeart size={18} /> },
     { id: 'users' as WorkspaceTab, label: '用户', icon: <Users size={18} /> },
+    { id: 'settings' as WorkspaceTab, label: '系统配置', icon: <Settings2 size={18} /> },
+
   ];
 
   const categories = useMemo(() => {
@@ -750,7 +753,7 @@ function App() {
     </div>
   );
 
-  const renderSystemConfig = () => (
+  const renderSettings = () => (
     <div className="moban-card px-6 py-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
@@ -1253,7 +1256,7 @@ function App() {
           </div>
         </div>
       </div>
-      {renderSystemConfig()}
+
     </div>
   );
 
@@ -1293,6 +1296,8 @@ function App() {
               {activeWorkspace === 'studio' && renderStudio()}
               {activeWorkspace === 'templates' && renderTemplateManager()}
               {activeWorkspace === 'users' && renderUsers()}
+              {activeWorkspace === 'settings' && renderSettings()}
+
             </div>
           </div>
         </div>
