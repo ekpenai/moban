@@ -1,4 +1,4 @@
-import { NestFactory } from '@nestjs/core';
+﻿import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { Catch, ArgumentsHost, HttpException, ExceptionFilter, HttpStatus, ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
@@ -36,7 +36,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
       ...(typeof message === 'object' ? message : { message }),
-      // 生产环境通常不返回 stack
+      // 鐢熶骇鐜閫氬父涓嶈繑鍥?stack
       stack: process.env.NODE_ENV === 'production' ? undefined : (exception as any).stack,
     });
   }
@@ -67,28 +67,33 @@ async function bootstrap() {
   app.use(json({ limit: process.env.UPLOAD_LIMIT || '50mb' }));
   app.use(urlencoded({ extended: true, limit: process.env.UPLOAD_LIMIT || '50mb' }));
 
+  // Raw Express CORS middleware (runs before NestJS routing) — handles preflight OPTIONS reliably behind proxies
+  app.use((req: any, res: any, next: any) => {
+    const origin = req.headers.origin;
+    if (origin && corsOrigins.length > 0 && !corsOrigins.includes(origin)) {
+      return res.status(403).json({ error: 'CORS blocked origin', origin });
+    }
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-
-      if (corsOrigins.length === 0) {
-        callback(null, true);
-        return;
-      }
-
-      if (corsOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error(`CORS blocked origin: ${origin}`), false);
-    },
+    origin: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-    credentials: false,
+    credentials: true,
     optionsSuccessStatus: 204,
   });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
@@ -99,3 +104,4 @@ async function bootstrap() {
   logger.log(`Server is running on: http://localhost:${port}`);
 }
 bootstrap();
+

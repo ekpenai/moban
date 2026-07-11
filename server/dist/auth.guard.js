@@ -20,8 +20,10 @@ let AuthGuard = class AuthGuard {
     canActivate(context) {
         const request = context.switchToHttp().getRequest();
         const authorization = request.headers.authorization || '';
-        const [scheme, token] = authorization.split(' ');
-        if (scheme !== 'Bearer' || !token) {
+        const [scheme, bearerToken] = authorization.split(' ');
+        const queryToken = typeof request.query?.token === 'string' ? request.query.token.trim() : '';
+        const token = scheme === 'Bearer' && bearerToken ? bearerToken : queryToken;
+        if (!token) {
             throw new common_1.UnauthorizedException({ success: false, message: '未登录' });
         }
         const payload = this.authTokenService.verify(token);

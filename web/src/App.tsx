@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
   Crown,
   DownloadCloud,
@@ -23,7 +23,8 @@ import {
   Wifi,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from './lib/axios';
+import api, { setApiBaseUrl } from './lib/axios';
+
 import { CanvasEditor } from './components/CanvasEditor';
 import { CropModal } from './components/CropModal';
 import { SaveModal } from './components/SaveModal';
@@ -223,7 +224,9 @@ function App() {
       setSystemConfig(
         DEFAULT_SYSTEM_CONFIG.map((item) => {
           if (item.key === 'api_base_url') {
-            return { ...item, value: (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000') as string };
+            const url = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000') as string;
+            setApiBaseUrl(url);
+            return { ...item, value: url };
           }
           const value = settingsMap.get(item.key);
           return typeof value === 'string' && value.trim() ? { ...item, value } : item;
@@ -240,6 +243,7 @@ function App() {
     try {
       await api.post(`/settings/${key}`, { value: target.value });
       toast.success('系统配置已保存');
+      if (key === 'api_base_url') { setApiBaseUrl(target.value); }
       await fetchSettings();
     } catch {
       toast.error('系统配置保存失败');

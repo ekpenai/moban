@@ -21,6 +21,11 @@ const user_favorite_entity_1 = require("./user-favorite.entity");
 const user_draft_entity_1 = require("./user-draft.entity");
 const user_data_service_1 = require("./user-data.service");
 const auth_token_service_1 = require("./auth-token.service");
+const arabic_reshape_service_1 = require("./arabic-reshape.service");
+const render_job_entity_1 = require("./render-job.entity");
+const render_job_log_entity_1 = require("./render-job-log.entity");
+const render_job_service_1 = require("./render-job.service");
+const coze_cutout_service_1 = require("./coze-cutout.service");
 const serve_static_1 = require("@nestjs/serve-static");
 const config_1 = require("@nestjs/config");
 const schedule_1 = require("@nestjs/schedule");
@@ -79,12 +84,12 @@ exports.AppModule = AppModule = __decorate([
                     username: configService.get('DB_USER'),
                     password: configService.get('DB_PASS'),
                     database: configService.get('DB_NAME'),
-                    entities: [template_entity_1.Template, setting_entity_1.Setting, wx_user_entity_1.WxUser, user_favorite_entity_1.UserFavorite, user_draft_entity_1.UserDraft],
+                    entities: [template_entity_1.Template, setting_entity_1.Setting, wx_user_entity_1.WxUser, user_favorite_entity_1.UserFavorite, user_draft_entity_1.UserDraft, render_job_entity_1.RenderJobEntity, render_job_log_entity_1.RenderJobLogEntity],
                     synchronize: true,
                 }),
                 inject: [config_1.ConfigService],
             }),
-            typeorm_1.TypeOrmModule.forFeature([template_entity_1.Template, setting_entity_1.Setting, wx_user_entity_1.WxUser, user_favorite_entity_1.UserFavorite, user_draft_entity_1.UserDraft]),
+            typeorm_1.TypeOrmModule.forFeature([template_entity_1.Template, setting_entity_1.Setting, wx_user_entity_1.WxUser, user_favorite_entity_1.UserFavorite, user_draft_entity_1.UserDraft, render_job_entity_1.RenderJobEntity, render_job_log_entity_1.RenderJobLogEntity]),
         ],
         controllers: [app_controller_1.AppController],
         providers: [
@@ -95,6 +100,9 @@ exports.AppModule = AppModule = __decorate([
             wechat_auth_service_1.WechatAuthService,
             user_data_service_1.UserDataService,
             auth_token_service_1.AuthTokenService,
+            arabic_reshape_service_1.ArabicReshapeService,
+            render_job_service_1.RenderJobService,
+            coze_cutout_service_1.CozeCutoutService,
         ],
     })
 ], AppModule);

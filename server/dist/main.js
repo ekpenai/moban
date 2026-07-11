@@ -94,10 +94,40 @@ async function bootstrap() {
     }
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const logger = app.get(logger_service_1.WinstonLoggerService);
+    const corsOrigins = (process.env.CORS_ORIGINS || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
     app.use(compression());
     app.use((0, express_1.json)({ limit: process.env.UPLOAD_LIMIT || '50mb' }));
     app.use((0, express_1.urlencoded)({ extended: true, limit: process.env.UPLOAD_LIMIT || '50mb' }));
-    app.enableCors();
+    app.use((req, res, next) => {
+        const origin = req.headers.origin;
+        if (origin && corsOrigins.length > 0 && !corsOrigins.includes(origin)) {
+            return res.status(403).json({ error: 'CORS blocked origin', origin });
+        }
+        if (origin) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+        }
+        else {
+            res.setHeader('Access-Control-Allow-Origin', '*');
+        }
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+        res.setHeader('Access-Control-Max-Age', '86400');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        if (req.method === 'OPTIONS') {
+            return res.sendStatus(204);
+        }
+        next();
+    });
+    app.enableCors({
+        origin: true,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+        credentials: true,
+        optionsSuccessStatus: 204,
+    });
     app.useGlobalPipes(new common_1.ValidationPipe({ transform: true, whitelist: true }));
     app.useGlobalFilters(new AllExceptionsFilter(logger));
     const port = process.env.PORT || 3000;

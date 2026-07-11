@@ -1,10 +1,22 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import toast from 'react-hot-toast';
 
 const AUTH_TOKEN_STORAGE_KEY = 'moban_auth_token';
 
+// Global runtime config — set by the app before making API calls
+let _apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+export function setApiBaseUrl(url: string) {
+  _apiBaseUrl = url.replace(/\/+$/, '');
+  api.defaults.baseURL = _apiBaseUrl;
+}
+
+export function getApiBaseUrl(): string {
+  return _apiBaseUrl;
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
+  baseURL: _apiBaseUrl,
   timeout: 60000,
 });
 
@@ -13,6 +25,10 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // Ensure Content-Type for multipart
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
   }
   return config;
 });
