@@ -118,7 +118,7 @@ async function bootstrap() {
             callback(new Error(`CORS blocked origin: ${origin}`), false);
         },
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'multipart/form-data'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
         credentials: true,
         optionsSuccessStatus: 204,
     });
