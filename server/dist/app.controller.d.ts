@@ -49,6 +49,13 @@ export declare class AppController {
             layers: any[];
         };
     }>;
+    importPsdTemplate(file: Express.Multer.File, req: Request): Promise<{
+        success: boolean;
+        templateId: string;
+        data: any;
+    }>;
+    private convertLayersToTemplateFormat;
+    private generateThumbnail;
     uploadImage(file: Express.Multer.File, req: Request): Promise<{
         url: string;
     }>;

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, UseGuards, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException, Res, UnauthorizedException, Patch } from '@nestjs/common';
+﻿﻿﻿﻿import { Controller, Get, Post, Param, Body, Delete, UseGuards, UseInterceptors, UploadedFile, Req, ServiceUnavailableException, BadRequestException, Res, UnauthorizedException, Patch } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, diskStorage } from 'multer';
 import { InjectQueue } from '@nestjs/bull';
@@ -236,6 +236,137 @@ export class AppController {
       }
     }
   }
+
+  @Post('templates/import-psd')
+  @UseInterceptors(FileInterceptor('file', { dest: './uploads', limits: { fileSize: PSD_UPLOAD_LIMIT_BYTES } }))
+  async importPsdTemplate(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
+    if (!file) {
+      throw new BadRequestException('未接收到 PSD 文件，或文件超过上传上限');
+    }
+    
+    this.logger.log('[import-psd] Starting import: name=' + file.originalname + ' size=' + file.size);
+    
+    try {
+      const psdResult = await this.psdService.parsePsd(file.path);
+      const layers = await this.convertLayersToTemplateFormat(psdResult.layers, req);
+      const thumbnailUrl = await this.generateThumbnail(layers, psdResult.width, psdResult.height, req);
+      
+      const template = new Template();
+      template.id = 'template_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      template.name = file.originalname.replace('.psd', '');
+      template.width = psdResult.width;
+      template.height = psdResult.height;
+      template.layers = layers;
+      template.thumbnail = thumbnailUrl || '';
+      template.category = 'PSD导入';
+      
+      const saved = await this.templateRepo.save(template);
+      this.logger.log('[import-psd] Template saved: id=' + saved.id);
+      
+      return {
+        success: true,
+        templateId: saved.id,
+        data: this.normalizeTemplateData(saved, req),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Import failed';
+      this.logger.error('[import-psd] Import failed: ' + message, '');
+      throw new BadRequestException('PSD 导入失败: ' + message);
+    } finally {
+      try {
+        if (file.path && fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      } catch (cleanupError) {
+        this.logger.error('[import-psd] Cleanup failed', '');
+      }
+    }
+  }
+  private async convertLayersToTemplateFormat(layers: any[], req: Request): Promise<any[]> {
+    const convertedLayers: any[] = [];
+    
+    for (const layer of layers) {
+      const convertedLayer: any = {
+        id: layer.id || 'layer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: layer.type || 'image',
+        x: layer.x || 0,
+        y: layer.y || 0,
+        width: layer.width || 0,
+        height: layer.height || 0,
+        rotate: layer.rotation || 0,
+        scale: layer.scaleX || 1,
+        opacity: layer.opacity !== undefined ? layer.opacity : 1,
+        editable: layer.editable !== false,
+        zIndex: layer.zIndex || 0,
+      };
+      
+      if (layer.type === 'text') {
+        convertedLayer.text = layer.text;
+        convertedLayer.fontSize = layer.fontSize;
+        convertedLayer.fontFamily = layer.fontFamily;
+        convertedLayer.color = layer.color;
+        convertedLayer.alignment = layer.textAlign;
+        convertedLayer.direction = layer.direction;
+      }
+      
+      if (layer.url && layer.url.startsWith('data:image')) {
+        try {
+          const imageUrl = await this.s3Service.uploadBase64(layer.url, 'templates');
+          convertedLayer.url = imageUrl;
+        } catch (uploadError) {
+          this.logger.warn('[import-psd] Failed to upload layer image: ' + uploadError.message);
+          convertedLayer.url = layer.url;
+        }
+      } else if (layer.url) {
+        convertedLayer.url = layer.url;
+      }
+      
+      if (layer.maskUrl && layer.maskUrl.startsWith('data:image')) {
+        try {
+          const maskUrl = await this.s3Service.uploadBase64(layer.maskUrl, 'templates');
+          convertedLayer.maskUrl = maskUrl;
+        } catch (uploadError) {
+          this.logger.warn('[import-psd] Failed to upload mask: ' + uploadError.message);
+          convertedLayer.maskUrl = layer.maskUrl;
+        }
+      } else if (layer.maskUrl) {
+        convertedLayer.maskUrl = layer.maskUrl;
+      }
+      
+      convertedLayers.push(convertedLayer);
+    }
+    
+    return convertedLayers;
+  }
+  private async generateThumbnail(layers: any[], width: number, height: number, req: Request): Promise<string | null> {
+    try {
+      const { createCanvas } = require('canvas');
+      const canvas = createCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      
+      const imageLayer = layers.find(function(l) { return l.type === 'image' && l.url; });
+      if (imageLayer) {
+        const { JSDOM } = require('jsdom');
+        const html = '<!DOCTYPE html><html><body><img src="' + imageLayer.url + '" /></body></html>';
+        const dom = new JSDOM(html);
+        const img = dom.window.document.querySelector('img');
+        
+        if (img && img.complete) {
+          ctx.drawImage(img, 0, 0, width, height);
+        }
+      }
+      
+      const thumbnailBase64 = canvas.toDataURL('image/png');
+      return await this.s3Service.uploadBase64(thumbnailBase64, 'thumbnails');
+    } catch (error) {
+      this.logger.warn('[import-psd] Failed to generate thumbnail: ' + error.message);
+      return null;
+    }
+  }
+
 
   @Post('upload/image')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
