@@ -118,8 +118,8 @@ async function bootstrap() {
             callback(new Error(`CORS blocked origin: ${origin}`), false);
         },
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-        credentials: false,
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'multipart/form-data'],
+        credentials: true,
         optionsSuccessStatus: 204,
     });
     app.useGlobalPipes(new common_1.ValidationPipe({ transform: true, whitelist: true }));
