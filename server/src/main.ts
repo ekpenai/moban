@@ -67,31 +67,33 @@ async function bootstrap() {
   app.use(json({ limit: process.env.UPLOAD_LIMIT || '50mb' }));
   app.use(urlencoded({ extended: true, limit: process.env.UPLOAD_LIMIT || '50mb' }));
 
+  // CORS configuration - allow all origins for development, restrict in production via CORS_ORIGINS env var
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow requests with no origin (like mobile apps, Postman, curl)
       if (!origin) {
         callback(null, true);
         return;
       }
-
-      if (corsOrigins.length === 0) {
-        callback(null, true);
+      
+      // If CORS_ORIGINS is set, only allow specified origins
+      if (corsOrigins.length > 0) {
+        if (corsOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error(`CORS blocked origin: ${origin}`), false);
         return;
       }
-
-      if (corsOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error(`CORS blocked origin: ${origin}`), false);
+      
+      // Otherwise allow all origins
+      callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-
-
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Cache-Control'],
+    exposedHeaders: ['Content-Type', 'Content-Length'],
+    maxAge: 86400,
     credentials: true,
-    optionsSuccessStatus: 204,
   });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.useGlobalFilters(new AllExceptionsFilter(logger));
